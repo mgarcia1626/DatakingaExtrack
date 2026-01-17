@@ -1,6 +1,6 @@
 ﻿
-
-pandas==2.2.3
-plotly
-streamlit==1.46.1
-
+selenium
+webdriver-manager
+pandas
+openpyxl
+python-dotenv
