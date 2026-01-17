@@ -4,3 +4,5 @@ webdriver-manager
 pandas
 openpyxl
 python-dotenv
+streamlit
+plotly
