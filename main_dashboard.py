@@ -159,9 +159,18 @@ with tab1:
     # Gráfico de torta: % de facturación por familia
     st.subheader("🥧 Facturación por Familia")
     if 'Código' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
+        # Convertir columnas a string para el merge
+        df_tickets_temp = df_tickets_filtrado.copy()
+        df_consumos_temp = df_consumos.copy()
+        
+        df_tickets_temp['Código'] = df_tickets_temp['Código'].astype(str)
+        df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
+        df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
+        df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
+        
         # Hacer merge con consumos para obtener la familia (usando Código y Sucursal)
-        df_con_familia = df_tickets_filtrado.merge(
-            df_consumos[['Codigo', 'Familia', 'Sucursal']],
+        df_con_familia = df_tickets_temp.merge(
+            df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
             left_on=['Código', 'Sucursal'],
             right_on=['Codigo', 'Sucursal'],
             how='left'
@@ -373,8 +382,15 @@ with tab3:
         
         # Multiselect para omitir familias específicas
         if 'Código' in df_tickets_filtrado.columns:
-            df_temp_familias = df_tickets_filtrado.merge(
-                df_consumos[['Codigo', 'Familia', 'Sucursal']],
+            df_tickets_temp = df_tickets_filtrado.copy()
+            df_consumos_temp = df_consumos.copy()
+            df_tickets_temp['Código'] = df_tickets_temp['Código'].astype(str)
+            df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
+            df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
+            df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
+            
+            df_temp_familias = df_tickets_temp.merge(
+                df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
                 left_on=['Código', 'Sucursal'],
                 right_on=['Codigo', 'Sucursal'],
                 how='left'
@@ -405,8 +421,15 @@ with tab3:
             # Si el checkbox está marcado, filtrar por familia
             if omitir_misma_familia and 'Código' in df_tickets_filtrado.columns:
                 # Merge para obtener familia del producto seleccionado
-                df_temp = df_tickets_filtrado[df_tickets_filtrado['Descripción'] == producto_seleccionado].merge(
-                    df_consumos[['Codigo', 'Familia', 'Sucursal']],
+                df_tickets_temp = df_tickets_filtrado[df_tickets_filtrado['Descripción'] == producto_seleccionado].copy()
+                df_consumos_temp = df_consumos.copy()
+                df_tickets_temp['Código'] = df_tickets_temp['Código'].astype(str)
+                df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
+                df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
+                df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
+                
+                df_temp = df_tickets_temp.merge(
+                    df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
                     left_on=['Código', 'Sucursal'],
                     right_on=['Codigo', 'Sucursal'],
                     how='left'
@@ -416,8 +439,15 @@ with tab3:
                     familia_producto = df_temp['Familia'].iloc[0]
                     
                     # Merge para obtener familia de los combos
-                    df_combos = df_combos.merge(
-                        df_consumos[['Codigo', 'Familia', 'Sucursal']],
+                    df_combos_temp = df_combos.copy()
+                    df_consumos_temp2 = df_consumos.copy()
+                    df_combos_temp['Código'] = df_combos_temp['Código'].astype(str)
+                    df_combos_temp['Sucursal'] = df_combos_temp['Sucursal'].astype(str)
+                    df_consumos_temp2['Codigo'] = df_consumos_temp2['Codigo'].astype(str)
+                    df_consumos_temp2['Sucursal'] = df_consumos_temp2['Sucursal'].astype(str)
+                    
+                    df_combos = df_combos_temp.merge(
+                        df_consumos_temp2[['Codigo', 'Familia', 'Sucursal']],
                         left_on=['Código', 'Sucursal'],
                         right_on=['Codigo', 'Sucursal'],
                         how='left'
@@ -430,8 +460,15 @@ with tab3:
             if len(familias_omitir) > 0 and 'Código' in df_tickets_filtrado.columns:
                 # Si aún no se hizo merge, hacerlo ahora
                 if 'Familia' not in df_combos.columns:
-                    df_combos = df_combos.merge(
-                        df_consumos[['Codigo', 'Familia', 'Sucursal']],
+                    df_combos_temp = df_combos.copy()
+                    df_consumos_temp3 = df_consumos.copy()
+                    df_combos_temp['Código'] = df_combos_temp['Código'].astype(str)
+                    df_combos_temp['Sucursal'] = df_combos_temp['Sucursal'].astype(str)
+                    df_consumos_temp3['Codigo'] = df_consumos_temp3['Codigo'].astype(str)
+                    df_consumos_temp3['Sucursal'] = df_consumos_temp3['Sucursal'].astype(str)
+                    
+                    df_combos = df_combos_temp.merge(
+                        df_consumos_temp3[['Codigo', 'Familia', 'Sucursal']],
                         left_on=['Código', 'Sucursal'],
                         right_on=['Codigo', 'Sucursal'],
                         how='left'
@@ -483,8 +520,15 @@ with tab3:
         
         if 'Código' in df_tickets_filtrado.columns:
             # Hacer merge con consumos para obtener familia (usando Código y Sucursal)
-            df_con_familia = df_tickets_filtrado.merge(
-                df_consumos[['Codigo', 'Familia', 'Sucursal']],
+            df_tickets_temp = df_tickets_filtrado.copy()
+            df_consumos_temp = df_consumos.copy()
+            df_tickets_temp['Código'] = df_tickets_temp['Código'].astype(str)
+            df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
+            df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
+            df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
+            
+            df_con_familia = df_tickets_temp.merge(
+                df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
                 left_on=['Código', 'Sucursal'],
                 right_on=['Codigo', 'Sucursal'],
                 how='left'
@@ -565,8 +609,15 @@ with tab4:
     
     if 'Código' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
         # Hacer merge con consumos para obtener la familia (usando Código y Sucursal)
-        df_con_familia = df_tickets_filtrado.merge(
-            df_consumos[['Codigo', 'Familia', 'Articulo', 'Sucursal']],
+        df_tickets_temp = df_tickets_filtrado.copy()
+        df_consumos_temp = df_consumos.copy()
+        df_tickets_temp['Código'] = df_tickets_temp['Código'].astype(str)
+        df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
+        df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
+        df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
+        
+        df_con_familia = df_tickets_temp.merge(
+            df_consumos_temp[['Codigo', 'Familia', 'Articulo', 'Sucursal']],
             left_on=['Código', 'Sucursal'],
             right_on=['Codigo', 'Sucursal'],
             how='left'
