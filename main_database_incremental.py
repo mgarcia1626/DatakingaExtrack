@@ -7,6 +7,7 @@ import pandas as pd
 from pathlib import Path
 import glob
 import os
+from datetime import datetime
 
 print("=" * 70)
 print("DATAKINGA - ACTUALIZACIÓN INCREMENTAL")
@@ -21,21 +22,28 @@ conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 
 try:
-    # ========== CONSUMOS - SOLO PRODUCTOS NUEVOS ==========
+    # ========== CONSUMOS - AGREGAR CON FECHA DE CARGA ==========
     print("\n" + "=" * 70)
-    print("PROCESANDO: CONSUMOS (SOLO PRODUCTOS NUEVOS)")
+    print("PROCESANDO: CONSUMOS (CON FECHA DE CARGA)")
     print("=" * 70)
     
-    # 1. LEER PRODUCTOS EXISTENTES EN LA BASE DE DATOS
-    print("\n[1/5] LEYENDO PRODUCTOS EXISTENTES EN LA BASE DE DATOS")
+    # 1. VERIFICAR ESTRUCTURA DE LA TABLA
+    print("\n[1/5] VERIFICANDO ESTRUCTURA DE LA TABLA")
     try:
-        df_existentes = pd.read_sql("SELECT Codigo, Sucursal FROM consumos", conn)
-        # Crear set de tuplas para búsqueda rápida
-        productos_existentes = set(zip(df_existentes['Codigo'], df_existentes['Sucursal']))
-        print(f"   ✓ {len(productos_existentes)} productos únicos en la base de datos")
+        # Leer productos existentes con fecha de carga
+        df_existentes = pd.read_sql("SELECT Codigo, Articulo, Sucursal, Fecha_Carga FROM consumos", conn)
+        print(f"   ✓ {len(df_existentes)} productos en la base de datos")
+        tiene_fecha_carga = True
     except Exception as e:
-        print(f"   ℹ️ No hay tabla consumos todavía (se creará): {e}")
-        productos_existentes = set()
+        # Si no existe la columna Fecha_Carga, necesitamos agregar la tabla con la nueva estructura
+        try:
+            df_existentes = pd.read_sql("SELECT Codigo, Articulo, Sucursal FROM consumos", conn)
+            print(f"   ⚠️ Tabla existente sin columna Fecha_Carga. Se agregará.")
+            tiene_fecha_carga = False
+        except:
+            print(f"   ℹ️ No hay tabla consumos todavía (se creará)")
+            df_existentes = pd.DataFrame()
+            tiene_fecha_carga = False
     
     # 2. BUSCAR ARCHIVOS DE CONSUMOS NUEVOS
     print("\n[2/5] BUSCANDO ARCHIVOS DE CONSUMOS")
@@ -91,52 +99,58 @@ try:
                 dataframes.append(df_temp)
                 print(f"      ✓ {len(df_temp)} productos leídos")
             
-            # 4. FILTRAR SOLO PRODUCTOS NUEVOS
-            print("\n[4/5] FILTRANDO PRODUCTOS NUEVOS")
+            # 4. AGREGAR FECHA DE CARGA
+            print("\n[4/5] AGREGANDO FECHA DE CARGA")
             
             # Combinar todos los archivos
             df_nuevos = pd.concat(dataframes, ignore_index=True)
+            
+            # Agregar fecha y hora de carga actual
+            fecha_carga = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            df_nuevos['Fecha_Carga'] = fecha_carga
+            
             print(f"   Total productos en archivos: {len(df_nuevos)}")
+            print(f"   Fecha de carga: {fecha_carga}")
             
-            # Filtrar solo los que NO existen en la base de datos
-            df_nuevos['existe'] = df_nuevos.apply(
-                lambda row: (row['Codigo'], row['Sucursal']) in productos_existentes,
-                axis=1
-            )
+            # 5. INSERTAR EN LA BASE DE DATOS
+            print("\n[5/5] INSERTANDO PRODUCTOS EN LA BASE DE DATOS")
             
-            df_a_insertar = df_nuevos[~df_nuevos['existe']].drop(columns=['existe'])
-            productos_repetidos = df_nuevos['existe'].sum()
-            
-            print(f"   ✓ Productos nuevos a insertar: {len(df_a_insertar)}")
-            print(f"   ℹ️ Productos ya existentes (omitidos): {productos_repetidos}")
-            
-            # 5. INSERTAR SOLO PRODUCTOS NUEVOS
-            if len(df_a_insertar) > 0:
-                print("\n[5/5] INSERTANDO PRODUCTOS NUEVOS EN LA BASE DE DATOS")
+            if len(df_existentes) == 0 or not tiene_fecha_carga:
+                # Crear tabla nueva con estructura correcta
+                cursor.execute("DROP TABLE IF EXISTS consumos")
+                cursor.execute("""
+                    CREATE TABLE consumos (
+                        Familia TEXT,
+                        Codigo TEXT,
+                        Articulo TEXT,
+                        Sucursal TEXT,
+                        Fecha_Carga TEXT
+                    )
+                """)
+                print("   ✓ Tabla consumos creada con columna Fecha_Carga")
                 
-                # Si no existe la tabla, crearla
-                if len(productos_existentes) == 0:
-                    cursor.execute("""
-                        CREATE TABLE IF NOT EXISTS consumos (
-                            Familia TEXT,
-                            Codigo TEXT,
-                            Articulo TEXT,
-                            Sucursal TEXT,
-                            PRIMARY KEY (Codigo, Sucursal)
-                        )
-                    """)
-                
-                # Insertar nuevos productos
-                df_a_insertar.to_sql('consumos', conn, if_exists='append', index=False)
-                print(f"   ✓ {len(df_a_insertar)} productos nuevos insertados")
-                
-                # Mostrar desglose por sucursal
-                print("\n   Desglose por sucursal:")
-                for sucursal in df_a_insertar['Sucursal'].unique():
-                    count = len(df_a_insertar[df_a_insertar['Sucursal'] == sucursal])
-                    print(f"   • {sucursal}: {count} productos nuevos")
-            else:
-                print("\n[5/5] No hay productos nuevos para insertar")
+                # Si había datos antiguos sin fecha, reinsertarlos con fecha actual
+                if len(df_existentes) > 0 and not tiene_fecha_carga:
+                    df_existentes['Fecha_Carga'] = fecha_carga
+                    df_existentes.to_sql('consumos', conn, if_exists='append', index=False)
+                    print(f"   ✓ {len(df_existentes)} productos existentes migrados con fecha")
+            
+            # Insertar todos los productos nuevos (permitir duplicados de Codigo+Sucursal con diferentes fechas)
+            df_nuevos.to_sql('consumos', conn, if_exists='append', index=False)
+            print(f"   ✓ {len(df_nuevos)} productos insertados")
+            
+            # Mostrar desglose por sucursal
+            print("\n   Desglose por sucursal:")
+            for sucursal in df_nuevos['Sucursal'].unique():
+                count = len(df_nuevos[df_nuevos['Sucursal'] == sucursal])
+                print(f"   • {sucursal}: {count} productos")
+            
+            # Crear índice para búsqueda rápida
+            try:
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_consumos_lookup ON consumos(Codigo, Sucursal, Fecha_Carga)")
+                print("\n   ✓ Índice creado para búsquedas optimizadas")
+            except:
+                pass
     
     # ========== TICKETS DETALLE - INSERTAR TODOS ==========
     print("\n" + "=" * 70)
@@ -269,14 +283,21 @@ try:
             # 5. DIVIDIR F.CIERRE EN FECHA Y HORA
             print("\n[5/6] PROCESANDO FECHA Y HORA")
             
+            fcierre_col = None
             for col in df_tickets.columns:
                 if 'cierre' in col.lower():
+                    fcierre_col = col
                     print(f"   Columna encontrada: {col}")
                     df_tickets[col] = pd.to_datetime(df_tickets[col], errors='coerce')
                     df_tickets['Fecha'] = df_tickets[col].dt.date
                     df_tickets['Hora'] = df_tickets[col].dt.time
                     print(f"   ✓ Fecha y Hora extraídas")
                     break
+            
+            # Eliminar columna F.Cierre después de procesarla
+            if fcierre_col and fcierre_col in df_tickets.columns:
+                df_tickets = df_tickets.drop(columns=[fcierre_col])
+                print(f"   ✓ Columna '{fcierre_col}' eliminada (ya se extrajo Fecha y Hora)")
             
             # 6. VALIDAR Y FILTRAR DUPLICADOS
             print("\n[6/8] VALIDANDO CALIDAD DE DATOS")
@@ -342,7 +363,6 @@ try:
                     CREATE TABLE IF NOT EXISTS tickets_detalle (
                         Número TEXT,
                         Tipo TEXT,
-                        "F.Cierre" TEXT,
                         Sucursal TEXT,
                         Mesa TEXT,
                         Mozo TEXT,
@@ -356,10 +376,6 @@ try:
                         Hora TEXT
                     )
                 """)
-                
-                # Renombrar columna F. Cierre → F.Cierre (sin espacio) para coincidir con la BD
-                if 'F. Cierre' in df_nuevos.columns:
-                    df_nuevos = df_nuevos.rename(columns={'F. Cierre': 'F.Cierre'})
                 
                 # Insertar solo registros nuevos (modo append)
                 df_nuevos.to_sql('tickets_detalle', conn, if_exists='append', index=False)

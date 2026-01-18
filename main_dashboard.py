@@ -44,8 +44,18 @@ def cargar_datos():
     # Cargar tickets_detalle
     df_tickets = pd.read_sql_query("SELECT * FROM tickets_detalle", conn)
     
-    # Cargar consumos
-    df_consumos = pd.read_sql_query("SELECT * FROM consumos", conn)
+    # Cargar consumos - solo la versión más reciente de cada Codigo+Sucursal
+    df_consumos = pd.read_sql_query("""
+        SELECT c1.* 
+        FROM consumos c1
+        INNER JOIN (
+            SELECT Codigo, Sucursal, MAX(Fecha_Carga) as max_fecha
+            FROM consumos
+            GROUP BY Codigo, Sucursal
+        ) c2 ON c1.Codigo = c2.Codigo 
+            AND c1.Sucursal = c2.Sucursal 
+            AND c1.Fecha_Carga = c2.max_fecha
+    """, conn)
     
     # Convertir columnas numéricas
     if 'Cantidad' in df_tickets.columns:
@@ -172,8 +182,12 @@ with tab1:
     st.subheader("📊 Facturación Diaria")
     if 'Fecha' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
         if 'Turno' in df_tickets_filtrado.columns:
+            # Calcular importe total (Cantidad * Importe unitario)
+            df_temp = df_tickets_filtrado.copy()
+            df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
             # Facturación por día y turno (barras apiladas)
-            facturacion_diaria_turno = df_tickets_filtrado.groupby(['Fecha', 'Turno'])['Importe'].sum().reset_index()
+            facturacion_diaria_turno = df_temp.groupby(['Fecha', 'Turno'])['Importe_Total'].sum().reset_index()
+            facturacion_diaria_turno = facturacion_diaria_turno.rename(columns={'Importe_Total': 'Importe'})
             facturacion_diaria_turno['Fecha'] = pd.to_datetime(facturacion_diaria_turno['Fecha'])
             facturacion_diaria_turno = facturacion_diaria_turno.sort_values('Fecha')
             
@@ -187,8 +201,12 @@ with tab1:
                 barmode='stack'
             )
         else:
+            # Calcular importe total (Cantidad * Importe unitario)
+            df_temp = df_tickets_filtrado.copy()
+            df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
             # Facturación sin turno
-            facturacion_diaria = df_tickets_filtrado.groupby('Fecha')['Importe'].sum().reset_index()
+            facturacion_diaria = df_temp.groupby('Fecha')['Importe_Total'].sum().reset_index()
+            facturacion_diaria = facturacion_diaria.rename(columns={'Importe_Total': 'Importe'})
             facturacion_diaria['Fecha'] = pd.to_datetime(facturacion_diaria['Fecha'])
             facturacion_diaria = facturacion_diaria.sort_values('Fecha')
             
@@ -216,21 +234,32 @@ with tab1:
         df_tickets_temp = df_tickets_filtrado.copy()
         df_consumos_temp = df_consumos.copy()
         
-        df_tickets_temp['Código'] = df_tickets_temp['Código'].astype(str)
-        df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
-        df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
-        df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
+        # Limpiar y normalizar columnas
+        df_tickets_temp['Código'] = df_tickets_temp['Código'].astype(str).str.strip().str.upper()
+        df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str).str.strip().str.upper()
+        df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str).str.strip().str.upper()
+        df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str).str.strip().str.upper()
+        
+        # Eliminar duplicados en consumos (mismo Codigo+Sucursal, mantener el primero)
+        df_consumos_unique = df_consumos_temp.drop_duplicates(subset=['Codigo', 'Sucursal'], keep='first')
         
         # Hacer merge con consumos para obtener la familia (usando Código y Sucursal)
         df_con_familia = df_tickets_temp.merge(
-            df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
+            df_consumos_unique[['Codigo', 'Familia', 'Sucursal']],
             left_on=['Código', 'Sucursal'],
             right_on=['Codigo', 'Sucursal'],
             how='left'
         )
         
+        # Filtrar valores nulos en Familia antes de agrupar
+        df_con_familia = df_con_familia.dropna(subset=['Familia'])
+        
+        # Calcular importe total (Cantidad * Importe unitario)
+        df_con_familia['Importe_Total'] = df_con_familia['Cantidad'] * df_con_familia['Importe']
+        
         # Agrupar por familia
-        facturacion_familia = df_con_familia.groupby('Familia')['Importe'].sum().reset_index()
+        facturacion_familia = df_con_familia.groupby('Familia')['Importe_Total'].sum().reset_index()
+        facturacion_familia = facturacion_familia.rename(columns={'Importe_Total': 'Importe'})
         facturacion_familia = facturacion_familia.sort_values('Importe', ascending=False)
         
         # Calcular porcentajes
@@ -338,10 +367,15 @@ with tab2:
         st.subheader("💵 Top Productos que Más Facturan")
         
         if 'Importe' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns:
-            top_facturacion = df_tickets_filtrado.groupby('Descripción').agg({
+            # Calcular importe total (Cantidad * Importe unitario)
+            df_temp = df_tickets_filtrado.copy()
+            df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
+            
+            top_facturacion = df_temp.groupby('Descripción').agg({
                 'Cantidad': 'sum',
-                'Importe': 'sum'
+                'Importe_Total': 'sum'
             }).reset_index()
+            top_facturacion = top_facturacion.rename(columns={'Importe_Total': 'Importe'})
             top_facturacion = top_facturacion.sort_values('Importe', ascending=False).head(cantidad_productos)
             
             col1, col2 = st.columns([2, 1])
@@ -371,10 +405,15 @@ with tab2:
         st.subheader("💸 Productos que Menos Facturan")
         
         if 'Importe' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns:
-            bottom_facturacion = df_tickets_filtrado.groupby('Descripción').agg({
+            # Calcular importe total (Cantidad * Importe unitario)
+            df_temp = df_tickets_filtrado.copy()
+            df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
+            
+            bottom_facturacion = df_temp.groupby('Descripción').agg({
                 'Cantidad': 'sum',
-                'Importe': 'sum'
+                'Importe_Total': 'sum'
             }).reset_index()
+            bottom_facturacion = bottom_facturacion.rename(columns={'Importe_Total': 'Importe'})
             bottom_facturacion = bottom_facturacion.sort_values('Importe', ascending=True).head(cantidad_productos)
             
             col1, col2 = st.columns([2, 1])
@@ -679,7 +718,14 @@ with tab4:
         # Gráfico de torta: % de facturación por familia (fijo)
         st.subheader("💰 Distribución de Facturación por Familia")
         
-        facturacion_familia = df_con_familia.groupby('Familia')['Importe'].sum().reset_index()
+        # Filtrar valores nulos en Familia antes de agrupar
+        df_con_familia_limpio = df_con_familia.dropna(subset=['Familia'])
+        
+        # Calcular importe total (Cantidad * Importe unitario)
+        df_con_familia_limpio['Importe_Total'] = df_con_familia_limpio['Cantidad'] * df_con_familia_limpio['Importe']
+        
+        facturacion_familia = df_con_familia_limpio.groupby('Familia')['Importe_Total'].sum().reset_index()
+        facturacion_familia = facturacion_familia.rename(columns={'Importe_Total': 'Importe'})
         total_facturacion = facturacion_familia['Importe'].sum()
         facturacion_familia['Porcentaje'] = (facturacion_familia['Importe'] / total_facturacion * 100).round(2)
         facturacion_familia = facturacion_familia.sort_values('Importe', ascending=False)
@@ -720,7 +766,10 @@ with tab4:
             # Gráfico de torta: % de productos dentro de la familia
             st.markdown("### 🥧 Distribución de Productos en la Familia")
             
-            productos_familia = df_familia.groupby('Descripción')['Importe'].sum().reset_index()
+            # Calcular importe total (Cantidad * Importe unitario)
+            df_familia['Importe_Total'] = df_familia['Cantidad'] * df_familia['Importe']
+            productos_familia = df_familia.groupby('Descripción')['Importe_Total'].sum().reset_index()
+            productos_familia = productos_familia.rename(columns={'Importe_Total': 'Importe'})
             total_familia = productos_familia['Importe'].sum()
             productos_familia['Porcentaje'] = (productos_familia['Importe'] / total_familia * 100).round(2)
             productos_familia = productos_familia.sort_values('Importe', ascending=False)
@@ -741,53 +790,50 @@ with tab4:
             
             st.markdown("---")
             
-            # Top 5 más vendidos y menos vendidos
-            col_left, col_right = st.columns(2)
+            # Lista completa de productos con cantidad y facturación
+            st.markdown("### 📋 Lista Completa de Productos")
             
-            with col_left:
-                st.markdown("### 🏆 Top 5 Más Vendidos")
+            if 'Cantidad' in df_familia.columns:
+                # Calcular importe total (Cantidad * Importe unitario)
+                df_familia['Importe_Total'] = df_familia['Cantidad'] * df_familia['Importe']
                 
-                if 'Cantidad' in df_familia.columns:
-                    top5_familia = df_familia.groupby('Descripción').agg({
-                        'Cantidad': 'sum',
-                        'Importe': 'sum'
-                    }).reset_index()
-                    
-                    total_cantidad_familia = top5_familia['Cantidad'].sum()
-                    total_importe_familia = top5_familia['Importe'].sum()
-                    
-                    top5_familia['% Peso'] = (top5_familia['Cantidad'] / total_cantidad_familia * 100).round(2)
-                    top5_familia = top5_familia.sort_values('Cantidad', ascending=False).head(5)
-                    
-                    st.dataframe(
-                        top5_familia[['Descripción', 'Cantidad', '% Peso', 'Importe']].rename(
-                            columns={'Importe': 'Facturado ($)'}
-                        ),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-            
-            with col_right:
-                st.markdown("### 📉 Top 5 Menos Vendidos")
+                productos_completos = df_familia.groupby('Descripción').agg({
+                    'Cantidad': 'sum',
+                    'Importe_Total': 'sum'
+                }).reset_index()
                 
-                if 'Cantidad' in df_familia.columns:
-                    bottom5_familia = df_familia.groupby('Descripción').agg({
-                        'Cantidad': 'sum',
-                        'Importe': 'sum'
-                    }).reset_index()
-                    
-                    total_cantidad_familia = bottom5_familia['Cantidad'].sum()
-                    
-                    bottom5_familia['% Peso'] = (bottom5_familia['Cantidad'] / total_cantidad_familia * 100).round(2)
-                    bottom5_familia = bottom5_familia.sort_values('Cantidad', ascending=True).head(5)
-                    
-                    st.dataframe(
-                        bottom5_familia[['Descripción', 'Cantidad', '% Peso', 'Importe']].rename(
-                            columns={'Importe': 'Facturado ($)'}
-                        ),
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                # Calcular totales
+                total_cantidad_familia = productos_completos['Cantidad'].sum()
+                total_importe_familia = productos_completos['Importe_Total'].sum()
+                
+                # Calcular porcentajes
+                productos_completos['% Cantidad'] = (productos_completos['Cantidad'] / total_cantidad_familia * 100).round(2)
+                productos_completos['% Facturación'] = (productos_completos['Importe_Total'] / total_importe_familia * 100).round(2)
+                
+                # Ordenar por facturación descendente
+                productos_completos = productos_completos.sort_values('Importe_Total', ascending=False)
+                
+                # Mostrar tabla completa
+                st.dataframe(
+                    productos_completos[['Descripción', 'Cantidad', '% Cantidad', 'Importe_Total', '% Facturación']].rename(
+                        columns={
+                            'Cantidad': 'Cantidad Vendida',
+                            'Importe_Total': 'Facturación ($)',
+                            '% Cantidad': '% del Total (Cant.)',
+                            '% Facturación': '% del Total (Fact.)'
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                    height=600
+                )
+                
+                # Mostrar totales
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Total Cantidad Vendida", f"{total_cantidad_familia:,.0f}")
+                with col2:
+                    st.metric("Total Facturación", f"${total_importe_familia:,.2f}")
     else:
         st.warning("⚠️ No hay datos suficientes para análisis por familia")
 

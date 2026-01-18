@@ -26,6 +26,24 @@ load_dotenv()
 # Archivo .env
 ENV_FILE = Path(".env")
 
+# Archivo de log
+LOG_FILE = Path("DataBase") / "execution_log.txt"
+
+def log_execution(message, execution_type="MANUAL"):
+    """Registra la ejecución en el archivo de log"""
+    timestamp = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    log_entry = f"[{timestamp}] [{execution_type}] {message}\n"
+    
+    try:
+        # Crear carpeta si no existe
+        LOG_FILE.parent.mkdir(exist_ok=True)
+        
+        # Escribir en el log
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
+    except Exception as e:
+        print(f"⚠️ No se pudo escribir en el log: {e}")
+
 def save_last_run(success):
     """Guarda información de la última ejecución en .env"""
     timestamp = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
@@ -76,6 +94,69 @@ def main():
     print_header("DATAKINGA - ACTUALIZACIÓN DIARIA AUTOMÁTICA")
     print(f"🕐 Inicio: {inicio.strftime('%d/%m/%Y %H:%M:%S')}\n")
     
+    log_execution("Iniciando proceso de actualización", "MANUAL")
+    
+    # Paso 1: Extraer datos
+    if not run_script("main.py", "EXTRACCIÓN DE DATOS"):
+        print("\n⚠️ Proceso detenido debido a errores en la extracción")
+        save_last_run(success=False)
+        log_execution("ERROR: Fallo en extracción de datos", "MANUAL")
+        return False
+    
+    # Paso 2: Actualizar base de datos
+    if not run_script("main_database_incremental.py", "ACTUALIZACIÓN DE BASE DE DATOS"):
+        print("\n⚠️ Proceso detenido debido a errores en la actualización")
+        save_last_run(success=False)
+        log_execution("ERROR: Fallo en actualización de base de datos", "MANUAL")
+        return False
+    
+    # Resumen final
+    fin = datetime.now()
+    duracion = fin - inicio
+    
+    print_header("PROCESO COMPLETADO EXITOSAMENTE")
+    print(f"🕐 Inicio:    {inicio.strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"🕐 Fin:       {fin.strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"⏱️  Duración:  {duracion.total_seconds():.1f} segundos")
+    print("\n✅ Todos los pasos completados correctamente")
+    print("=" * 70 + "\n")
+    
+    # Guardar información de última ejecución
+    save_last_run(success=True)
+    log_execution(f"Proceso completado exitosamente (duración: {duracion.total_seconds():.1f}s)", "MANUAL")
+    
+    return True
+
+def run_scheduled():
+    """Ejecuta el proceso completo y registra en log"""
+    print(f"\n{'='*70}")
+    print(f"🔔 EJECUCIÓN PROGRAMADA - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"{'='*70}")
+    
+    log_execution("Iniciando ejecución programada", "SCHEDULED")
+    inicio = datetime.now()
+    
+    # Ejecutar main
+    success = main_without_log()
+    
+    fin = datetime.now()
+    duracion = fin - inicio
+    
+    if success:
+        log_execution(f"Ejecución programada completada exitosamente (duración: {duracion.total_seconds():.1f}s)", "SCHEDULED")
+    else:
+        log_execution("ERROR: Ejecución programada falló", "SCHEDULED")
+        print("\n⚠️ ATENCIÓN: El proceso programado tuvo errores")
+    
+    return success
+
+def main_without_log():
+    """Versión de main sin logging redundante para ejecuciones programadas"""
+    inicio = datetime.now()
+    
+    print_header("DATAKINGA - ACTUALIZACIÓN DIARIA AUTOMÁTICA")
+    print(f"🕐 Inicio: {inicio.strftime('%d/%m/%Y %H:%M:%S')}\n")
+    
     # Paso 1: Extraer datos
     if not run_script("main.py", "EXTRACCIÓN DE DATOS"):
         print("\n⚠️ Proceso detenido debido a errores en la extracción")
@@ -104,19 +185,6 @@ def main():
     
     return True
 
-def run_scheduled():
-    """Ejecuta el proceso completo y registra en log"""
-    print(f"\n{'='*70}")
-    print(f"🔔 EJECUCIÓN PROGRAMADA - {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    print(f"{'='*70}")
-    
-    success = main()
-    
-    if not success:
-        print("\n⚠️ ATENCIÓN: El proceso programado tuvo errores")
-    
-    return success
-
 def setup_schedule():
     """Configura los horarios de ejecución desde .env"""
     time_1 = os.getenv('SCHEDULE_TIME_1', '08:00')
@@ -127,9 +195,13 @@ def setup_schedule():
     print(f"📅 Horario 1: {time_1}")
     print(f"📅 Horario 2: {time_2}")
     print(f"📅 Horario 3: {time_3}")
+    print(f"\n📄 Log de ejecuciones: {LOG_FILE}")
     print("\n⏰ El proceso se ejecutará automáticamente en estos horarios")
     print("   Presiona Ctrl+C para detener\n")
     print("=" * 70)
+    
+    # Registrar inicio del scheduler
+    log_execution(f"Scheduler iniciado - Horarios: {time_1}, {time_2}, {time_3}", "SYSTEM")
     
     # Programar las 3 ejecuciones diarias
     schedule.every().day.at(time_1).do(run_scheduled)
@@ -145,6 +217,7 @@ def setup_schedule():
             schedule.run_pending()
             time.sleep(60)  # Verificar cada minuto
     except KeyboardInterrupt:
+        log_execution("Scheduler detenido por el usuario", "SYSTEM")
         print("\n\n⚠️ Programación detenida por el usuario")
         print("=" * 70 + "\n")
 

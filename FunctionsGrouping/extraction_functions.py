@@ -13,10 +13,13 @@ import os
 import glob
 
 
-def extraer_cinta_testigo(driver, wait, download_dir):
+def extraer_cinta_testigo(driver, wait, download_dir, fecha_desde=None, fecha_hasta=None):
     """
     Extrae datos de Cinta Testigo usando el botón Exportar a Excel
-    Desde: día anterior, Hasta: hoy
+    
+    Args:
+        fecha_desde: datetime object o None (por defecto: ayer)
+        fecha_hasta: datetime object o None (por defecto: hoy)
     """
     print("\n" + "=" * 70)
     print("EXTRACCIÓN: CINTA TESTIGO")
@@ -24,14 +27,17 @@ def extraer_cinta_testigo(driver, wait, download_dir):
     
     # Calcular fechas
     from datetime import datetime, timedelta
-    fecha_ayer = datetime.now() - timedelta(days=1)
-    fecha_hoy = datetime.now()
     
-    fecha_desde_barras = fecha_ayer.strftime('%d/%m/%Y')
-    fecha_desde_sin_barras = fecha_ayer.strftime('%d%m%Y')
+    if fecha_desde is None:
+        fecha_desde = datetime.now() - timedelta(days=1)
+    if fecha_hasta is None:
+        fecha_hasta = datetime.now()
     
-    fecha_hasta_barras = fecha_hoy.strftime('%d/%m/%Y')
-    fecha_hasta_sin_barras = fecha_hoy.strftime('%d%m%Y')
+    fecha_desde_barras = fecha_desde.strftime('%d/%m/%Y')
+    fecha_desde_sin_barras = fecha_desde.strftime('%d%m%Y')
+    
+    fecha_hasta_barras = fecha_hasta.strftime('%d/%m/%Y')
+    fecha_hasta_sin_barras = fecha_hasta.strftime('%d%m%Y')
     
     print(f"\n   📅 Desde: {fecha_desde_barras} | Hasta: {fecha_hasta_barras}")
     
@@ -146,10 +152,13 @@ def extraer_cinta_testigo(driver, wait, download_dir):
         return None
 
 
-def extraer_tickets_detalle(driver, wait, download_dir):
+def extraer_tickets_detalle(driver, wait, download_dir, fecha_desde=None, fecha_hasta=None):
     """
     Extrae Tickets con Detalle para todas las sucursales
-    Desde: día anterior, Hasta: hoy
+    
+    Args:
+        fecha_desde: datetime object o None (por defecto: ayer)
+        fecha_hasta: datetime object o None (por defecto: hoy)
     """
     print("\n" + "=" * 70)
     print("EXTRACCIÓN: TICKETS CON DETALLE")
@@ -157,14 +166,17 @@ def extraer_tickets_detalle(driver, wait, download_dir):
     
     # Calcular fechas
     from datetime import datetime, timedelta
-    fecha_ayer = datetime.now() - timedelta(days=1)
-    fecha_hoy = datetime.now()
     
-    fecha_desde_barras = fecha_ayer.strftime('%d/%m/%Y')
-    fecha_desde_sin_barras = fecha_ayer.strftime('%d%m%Y')
+    if fecha_desde is None:
+        fecha_desde = datetime.now() - timedelta(days=1)
+    if fecha_hasta is None:
+        fecha_hasta = datetime.now()
     
-    fecha_hasta_barras = fecha_hoy.strftime('%d/%m/%Y')
-    fecha_hasta_sin_barras = fecha_hoy.strftime('%d%m%Y')
+    fecha_desde_barras = fecha_desde.strftime('%d/%m/%Y')
+    fecha_desde_sin_barras = fecha_desde.strftime('%d%m%Y')
+    
+    fecha_hasta_barras = fecha_hasta.strftime('%d/%m/%Y')
+    fecha_hasta_sin_barras = fecha_hasta.strftime('%d%m%Y')
     
     print(f"\n   📅 Desde: {fecha_desde_barras} | Hasta: {fecha_hasta_barras}")
     
@@ -290,10 +302,13 @@ def extraer_tickets_detalle(driver, wait, download_dir):
     return archivos_guardados
 
 
-def extraer_consumos(driver, wait, download_dir):
+def extraer_consumos(driver, wait, download_dir, fecha_desde=None, fecha_hasta=None):
     """
     Extrae datos de Consumos por sucursal usando checkboxes
-    Desde: día anterior, Hasta: hoy
+    
+    Args:
+        fecha_desde: datetime object o None (por defecto: ayer)
+        fecha_hasta: datetime object o None (por defecto: hoy)
     """
     print("\n" + "=" * 70)
     print("EXTRACCIÓN: CONSUMOS POR SUCURSAL")
@@ -301,14 +316,17 @@ def extraer_consumos(driver, wait, download_dir):
     
     # Calcular fechas
     from datetime import datetime, timedelta
-    fecha_ayer = datetime.now() - timedelta(days=1)
-    fecha_hoy = datetime.now()
     
-    fecha_desde_barras = fecha_ayer.strftime('%d/%m/%Y')
-    fecha_desde_sin_barras = fecha_ayer.strftime('%d%m%Y')
+    if fecha_desde is None:
+        fecha_desde = datetime.now() - timedelta(days=1)
+    if fecha_hasta is None:
+        fecha_hasta = datetime.now()
     
-    fecha_hasta_barras = fecha_hoy.strftime('%d/%m/%Y')
-    fecha_hasta_sin_barras = fecha_hoy.strftime('%d%m%Y')
+    fecha_desde_barras = fecha_desde.strftime('%d/%m/%Y')
+    fecha_desde_sin_barras = fecha_desde.strftime('%d%m%Y')
+    
+    fecha_hasta_barras = fecha_hasta.strftime('%d/%m/%Y')
+    fecha_hasta_sin_barras = fecha_hasta.strftime('%d%m%Y')
     
     print(f"\n   📅 Desde: {fecha_desde_barras} | Hasta: {fecha_hasta_barras}")
     
