@@ -30,10 +30,26 @@ st.markdown("---")
 # Conectar a la base de datos
 @st.cache_resource
 def get_database_connection():
-    db_path = Path('DataBase/datakinga.db')
-    if not db_path.exists():
-        st.error(f"❌ No se encontró la base de datos: {db_path}")
+    # Buscar la base de datos en múltiples ubicaciones posibles
+    possible_paths = [
+        Path('DataBase/datakinga.db'),  # Desarrollo local
+        Path('/mount/src/datakingaextrack/DataBase/datakinga.db'),  # Streamlit Cloud
+        Path(__file__).parent / 'DataBase' / 'datakinga.db',  # Relativo al script
+    ]
+    
+    db_path = None
+    for path in possible_paths:
+        if path.exists():
+            db_path = path
+            break
+    
+    if db_path is None:
+        st.error("❌ No se encontró la base de datos en ninguna ubicación")
+        st.info("Ubicaciones buscadas:")
+        for p in possible_paths:
+            st.write(f"- {p.absolute()}")
         st.stop()
+    
     return sqlite3.connect(db_path, check_same_thread=False)
 
 conn = get_database_connection()
