@@ -5,9 +5,15 @@ Visualización de datos con Streamlit
 import streamlit as st
 import pandas as pd
 import sqlite3
+import os
 from pathlib import Path
+from datetime import datetime
+from dotenv import load_dotenv
 import plotly.express as px
 import plotly.graph_objects as go
+
+# Cargar variables de entorno
+load_dotenv()
 
 # Configuración de la página
 st.set_page_config(
@@ -50,6 +56,29 @@ def cargar_datos():
     return df_tickets, df_consumos
 
 df_tickets, df_consumos = cargar_datos()
+
+# Mostrar última actualización y métricas
+last_run_time = os.getenv('LAST_RUN_TIME', '')
+last_run_status = os.getenv('LAST_RUN_STATUS', '')
+
+if last_run_time:
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        status_icon = "✅" if last_run_status == "SUCCESS" else "❌"
+        status_text = "Exitosa" if last_run_status == "SUCCESS" else "Con errores"
+        st.info(f"🕐 **Última actualización:** {last_run_time} {status_icon} {status_text}")
+    with col2:
+        st.metric("📊 Total Tickets", f"{len(df_tickets):,}")
+    with col3:
+        st.metric("🛒 Total Productos", f"{len(df_consumos):,}")
+else:
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("📊 Total Tickets", f"{len(df_tickets):,}")
+    with col2:
+        st.metric("🛒 Total Productos", f"{len(df_consumos):,}")
+
+st.markdown("---")
 
 # Sidebar - Filtros globales
 st.sidebar.header("🔍 Filtros")
@@ -104,6 +133,30 @@ if 'Fecha' in df_tickets_filtrado.columns:
     ]
 else:
     st.sidebar.warning("⚠️ No hay columna Fecha")
+
+# Filtro por turno (OPCIONAL - múltiple selección)
+if 'Turno' in df_tickets_filtrado.columns:
+    turnos_disponibles = sorted(df_tickets_filtrado['Turno'].dropna().unique().tolist())
+    if len(turnos_disponibles) > 0:
+        st.sidebar.markdown("**Turno**")
+        
+        # Opción "Todos"
+        seleccionar_todos = st.sidebar.checkbox("Seleccionar todos los turnos", value=True)
+        
+        if seleccionar_todos:
+            turnos_seleccionados = turnos_disponibles
+        else:
+            turnos_seleccionados = st.sidebar.multiselect(
+                "Seleccionar turnos",
+                turnos_disponibles,
+                default=turnos_disponibles
+            )
+        
+        # Aplicar filtro de turnos
+        if turnos_seleccionados:
+            df_tickets_filtrado = df_tickets_filtrado[df_tickets_filtrado['Turno'].isin(turnos_seleccionados)]
+        else:
+            st.sidebar.warning("⚠️ Selecciona al menos un turno")
 
 st.sidebar.markdown("---")
 st.sidebar.info(f"📋 Registros filtrados: {len(df_tickets_filtrado)}")
