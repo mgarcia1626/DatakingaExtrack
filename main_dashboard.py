@@ -27,59 +27,68 @@ st.set_page_config(
 st.title("📊 DataKinga Dashboard")
 st.markdown("---")
 
-# Conectar a la base de datos
-@st.cache_resource
-def get_database_connection():
-    # Buscar la base de datos en múltiples ubicaciones posibles
+# Función para obtener la ruta de la base de datos
+def get_database_path():
+    """Busca la base de datos en múltiples ubicaciones posibles"""
     possible_paths = [
         Path('DataBase/datakinga.db'),  # Desarrollo local
         Path('/mount/src/datakingaextrack/DataBase/datakinga.db'),  # Streamlit Cloud
         Path(__file__).parent / 'DataBase' / 'datakinga.db',  # Relativo al script
     ]
     
-    db_path = None
     for path in possible_paths:
         if path.exists():
-            db_path = path
-            break
+            return str(path)
     
-    if db_path is None:
-        st.error("❌ No se encontró la base de datos en ninguna ubicación")
-        st.info("Ubicaciones buscadas:")
-        for p in possible_paths:
-            st.write(f"- {p.absolute()}")
-        st.stop()
+    # Si no se encuentra, mostrar error con ubicaciones buscadas
+    st.error("❌ No se encontró la base de datos en ninguna ubicación")
+    st.info("Ubicaciones buscadas:")
+    for p in possible_paths:
+        st.write(f"- {p.absolute()}")
+    st.stop()
     
-    return sqlite3.connect(db_path, check_same_thread=False)
-
-conn = get_database_connection()
+    return None
 
 # Cargar datos
 @st.cache_data
 def cargar_datos():
-    # Cargar tickets_detalle
-    df_tickets = pd.read_sql_query("SELECT * FROM tickets_detalle", conn)
+    """Carga los datos de la base de datos SQLite"""
+    db_path = get_database_path()
     
-    # Cargar consumos - solo la versión más reciente de cada Codigo+Sucursal
-    df_consumos = pd.read_sql_query("""
-        SELECT c1.* 
-        FROM consumos c1
-        INNER JOIN (
-            SELECT Codigo, Sucursal, MAX(Fecha_Carga) as max_fecha
-            FROM consumos
-            GROUP BY Codigo, Sucursal
+    # Crear conexión dentro de la función (mejor para el caché de Streamlit)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    
+    try:
+        # Cargar tickets_detalle
+        df_tickets = pd.read_sql_query("SELECT * FROM tickets_detalle", conn)
+        
+        # Cargar consumos - solo la versión más reciente de cada Codigo+Sucursal
+        df_consumos = pd.read_sql_query("""
+            SELECT c1.* 
+            FROM consumos c1
+            INNER JOIN (
+                SELECT Codigo, Sucursal, MAX(Fecha_Carga) as max_fecha
+                FROM consumos
+                GROUP BY Codigo, Sucursal
         ) c2 ON c1.Codigo = c2.Codigo 
             AND c1.Sucursal = c2.Sucursal 
             AND c1.Fecha_Carga = c2.max_fecha
-    """, conn)
-    
-    # Convertir columnas numéricas
-    if 'Cantidad' in df_tickets.columns:
-        df_tickets['Cantidad'] = pd.to_numeric(df_tickets['Cantidad'], errors='coerce')
-    if 'Importe' in df_tickets.columns:
-        df_tickets['Importe'] = pd.to_numeric(df_tickets['Importe'], errors='coerce')
-    
-    return df_tickets, df_consumos
+        """, conn)
+        
+        # Convertir columnas numéricas
+        if 'Cantidad' in df_tickets.columns:
+            df_tickets['Cantidad'] = pd.to_numeric(df_tickets['Cantidad'], errors='coerce')
+        if 'Importe' in df_tickets.columns:
+            df_tickets['Importe'] = pd.to_numeric(df_tickets['Importe'], errors='coerce')
+        
+        return df_tickets, df_consumos
+        
+    except Exception as e:
+        st.error(f"❌ Error al cargar datos de la base de datos: {str(e)}")
+        st.info("Verifica que la base de datos tenga las tablas 'tickets_detalle' y 'consumos'")
+        raise
+    finally:
+        conn.close()
 
 df_tickets, df_consumos = cargar_datos()
 
