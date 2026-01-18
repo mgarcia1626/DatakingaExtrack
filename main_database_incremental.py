@@ -6,6 +6,7 @@ import sqlite3
 import pandas as pd
 from pathlib import Path
 import glob
+import os
 
 print("=" * 70)
 print("DATAKINGA - ACTUALIZACIÓN INCREMENTAL")
@@ -60,9 +61,10 @@ try:
             for archivo in archivos:
                 # Extraer nombre de sucursal del nombre del archivo
                 # Formato: consumos_SUCURSAL_DD_MM_YYYY.xlsx
+                # Ejemplo: consumos_ENTRE_RIOS_18_01_2026.xlsx → SUCURSAL = ENTRE_RIOS
                 nombre_archivo = Path(archivo).stem
                 partes = nombre_archivo.split('_')
-                nombre_sucursal = '_'.join(partes[1:-3])  # Maneja nombres con espacios
+                nombre_sucursal = '_'.join(partes[1:-3])  # Maneja nombres con guiones bajos
                 
                 print(f"   📄 {nombre_archivo}")
                 print(f"      Sucursal: {nombre_sucursal}")
@@ -192,16 +194,13 @@ try:
             dataframes_detalle = []
             
             for archivo in archivos_detalle:
-                # Formato puede ser: Ticket_SUCURSAL.xlsx o tickets_detalle_SUCURSAL_DD_MM_YYYY_HH_MM_SS.xlsx
+                # Formato generado por extraction_functions.py: SUCURSAL_DD_MM_YYYY.xlsx
+                # Ejemplo: ENTRE_RIOS_18_01_2026.xlsx → SUCURSAL = ENTRE_RIOS
                 nombre_archivo = Path(archivo).stem
                 partes = nombre_archivo.split('_')
                 
-                # Si empieza con "tickets_detalle", formato largo
-                if partes[0].lower() == 'tickets' and len(partes) > 2:
-                    nombre_sucursal = '_'.join(partes[2:-6])  # tickets_detalle_SUCURSAL_DD_MM_YYYY_HH_MM_SS
-                else:
-                    # Formato simple: Ticket_SUCURSAL
-                    nombre_sucursal = '_'.join(partes[1:])
+                # Tomar todas las partes excepto las últimas 3 (DD_MM_YYYY)
+                nombre_sucursal = '_'.join(partes[:-3]) if len(partes) > 3 else partes[0]
                 
                 print(f"   📄 {nombre_archivo}")
                 print(f"      Sucursal: {nombre_sucursal}")
@@ -231,17 +230,41 @@ try:
             print(f"   Total registros: {len(df_tickets)}")
             
             # Agregar TURNO desde Cinta Testigo
-            if df_cinta is not None and 'TURNO' in df_cinta.columns:
+            if df_cinta is not None:
                 print("\n   Agregando columna TURNO desde Cinta Testigo...")
-                df_tickets = df_tickets.merge(
-                    df_cinta[['Número', 'TURNO']],
-                    on='Número',
-                    how='left'
-                )
-                registros_con_turno = df_tickets['TURNO'].notna().sum()
-                print(f"   ✓ {registros_con_turno} registros con TURNO asignado")
+                
+                # Buscar la columna de turno (puede ser 'Turno' o 'TURNO')
+                turno_col = None
+                for col in df_cinta.columns:
+                    if col.upper() == 'TURNO':
+                        turno_col = col
+                        break
+                
+                # Buscar la columna de número
+                numero_col = None
+                for col in df_cinta.columns:
+                    if col.upper() == 'NÚMERO' or col.upper() == 'NUMERO':
+                        numero_col = col
+                        break
+                
+                if turno_col and numero_col:
+                    # Renombrar columnas para el merge
+                    df_cinta_merge = df_cinta[[numero_col, turno_col]].copy()
+                    df_cinta_merge.columns = ['Número', 'Turno']
+                    
+                    # Hacer merge
+                    df_tickets = df_tickets.merge(
+                        df_cinta_merge,
+                        on='Número',
+                        how='left'
+                    )
+                    registros_con_turno = df_tickets['Turno'].notna().sum()
+                    print(f"   ✓ {registros_con_turno} registros con TURNO asignado")
+                else:
+                    print(f"   ⚠️ No se encontraron columnas necesarias")
+                    print(f"   Columnas disponibles: {list(df_cinta.columns)}")
             else:
-                print("   ⚠️ No se pudo agregar TURNO (falta archivo o columna)")
+                print("   ⚠️ No se pudo agregar TURNO (falta archivo de Cinta)")
             
             # 5. DIVIDIR F.CIERRE EN FECHA Y HORA
             print("\n[5/6] PROCESANDO FECHA Y HORA")
@@ -255,38 +278,100 @@ try:
                     print(f"   ✓ Fecha y Hora extraídas")
                     break
             
-            # 6. INSERTAR TICKETS EN LA BASE DE DATOS
-            print("\n[6/6] INSERTANDO TICKETS EN LA BASE DE DATOS")
+            # 6. VALIDAR Y FILTRAR DUPLICADOS
+            print("\n[6/8] VALIDANDO CALIDAD DE DATOS")
             
-            # Si no existe la tabla, crearla
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tickets_detalle (
-                    Número TEXT,
-                    Tipo TEXT,
-                    "F.Cierre" TEXT,
-                    Sucursal TEXT,
-                    Mesa TEXT,
-                    Mozo TEXT,
-                    Nombre TEXT,
-                    Código TEXT,
-                    Descripción TEXT,
-                    Cantidad REAL,
-                    Importe REAL,
-                    Turno TEXT,
-                    Fecha TEXT,
-                    Hora TEXT
-                )
-            """)
+            # Eliminar registros con Sucursal NULL
+            registros_antes = len(df_tickets)
+            df_tickets = df_tickets[df_tickets['Sucursal'].notna()]
+            registros_sin_sucursal = registros_antes - len(df_tickets)
+            if registros_sin_sucursal > 0:
+                print(f"   ⚠️ Eliminados {registros_sin_sucursal} registros sin Sucursal")
+            else:
+                print(f"   ✓ Todos los registros tienen Sucursal")
             
-            # Insertar todos los registros (modo append)
-            df_tickets.to_sql('tickets_detalle', conn, if_exists='append', index=False)
-            print(f"   ✓ {len(df_tickets)} registros insertados")
+            # Eliminar duplicados dentro del mismo DataFrame
+            registros_antes = len(df_tickets)
+            df_tickets = df_tickets.drop_duplicates()
+            duplicados_internos = registros_antes - len(df_tickets)
+            if duplicados_internos > 0:
+                print(f"   ⚠️ Eliminados {duplicados_internos} duplicados internos")
+            else:
+                print(f"   ✓ No hay duplicados internos")
             
-            # Mostrar desglose por sucursal
-            print("\n   Desglose por sucursal:")
-            for sucursal in df_tickets['Sucursal'].unique():
-                count = len(df_tickets[df_tickets['Sucursal'] == sucursal])
-                print(f"   • {sucursal}: {count} tickets")
+            print(f"   Total registros válidos: {len(df_tickets)}")
+            
+            # 7. VALIDAR DUPLICADOS CON LA BASE DE DATOS
+            print("\n[7/8] VALIDANDO DUPLICADOS CON BASE DE DATOS")
+            
+            # Leer tickets existentes de la base de datos
+            try:
+                df_existentes = pd.read_sql("SELECT * FROM tickets_detalle", conn)
+                print(f"   Registros existentes en BD: {len(df_existentes)}")
+                
+                # Usar solo Número + Código para detectar duplicados (combinación única por línea de ticket)
+                # Esto es más confiable que comparar todas las columnas
+                df_tickets['_key'] = df_tickets['Número'].astype(str) + '|' + df_tickets['Código'].astype(str)
+                df_existentes['_key'] = df_existentes['Número'].astype(str) + '|' + df_existentes['Código'].astype(str)
+                
+                # Filtrar solo registros nuevos
+                keys_existentes = set(df_existentes['_key'])
+                df_tickets['es_duplicado'] = df_tickets['_key'].isin(keys_existentes)
+                
+                duplicados = df_tickets['es_duplicado'].sum()
+                df_nuevos = df_tickets[~df_tickets['es_duplicado']].drop(columns=['_key', 'es_duplicado'])
+                
+                print(f"   Registros en archivos: {len(df_tickets)}")
+                print(f"   Duplicados detectados: {duplicados}")
+                print(f"   Registros nuevos a insertar: {len(df_nuevos)}")
+                
+            except Exception as e:
+                print(f"   ℹ️ No hay tabla tickets_detalle todavía (se creará): {e}")
+                df_nuevos = df_tickets.copy()
+                if '_key' in df_nuevos.columns:
+                    df_nuevos = df_nuevos.drop(columns=['_key'])
+                if 'es_duplicado' in df_nuevos.columns:
+                    df_nuevos = df_nuevos.drop(columns=['es_duplicado'])
+            
+            # 7. INSERTAR SOLO TICKETS NUEVOS
+            print("\n[7/7] INSERTANDO TICKETS EN LA BASE DE DATOS")
+            
+            if len(df_nuevos) > 0:
+                # Si no existe la tabla, crearla
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS tickets_detalle (
+                        Número TEXT,
+                        Tipo TEXT,
+                        "F.Cierre" TEXT,
+                        Sucursal TEXT,
+                        Mesa TEXT,
+                        Mozo TEXT,
+                        Nombre TEXT,
+                        Código TEXT,
+                        Descripción TEXT,
+                        Cantidad REAL,
+                        Importe REAL,
+                        Turno TEXT,
+                        Fecha TEXT,
+                        Hora TEXT
+                    )
+                """)
+                
+                # Renombrar columna F. Cierre → F.Cierre (sin espacio) para coincidir con la BD
+                if 'F. Cierre' in df_nuevos.columns:
+                    df_nuevos = df_nuevos.rename(columns={'F. Cierre': 'F.Cierre'})
+                
+                # Insertar solo registros nuevos (modo append)
+                df_nuevos.to_sql('tickets_detalle', conn, if_exists='append', index=False)
+                print(f"   ✓ {len(df_nuevos)} registros nuevos insertados")
+                
+                # Mostrar desglose por sucursal
+                print("\n   Desglose por sucursal:")
+                for sucursal in df_nuevos['Sucursal'].unique():
+                    count = len(df_nuevos[df_nuevos['Sucursal'] == sucursal])
+                    print(f"   • {sucursal}: {count} tickets")
+            else:
+                print("   ℹ️ No hay registros nuevos para insertar (todos son duplicados)")
     
     # ========== RESUMEN FINAL ==========
     print("\n" + "=" * 70)
@@ -306,34 +391,34 @@ try:
     conn.commit()
     print("\n✅ ACTUALIZACIÓN INCREMENTAL COMPLETADA")
     
-    # ========== LIMPIAR CARPETAS ==========
-    print("\n" + "=" * 70)
-    print("LIMPIANDO CARPETAS")
-    print("=" * 70)
-    
-    carpetas_limpiar = [
-        Path('DataBase/Consumos'),
-        Path('DataBase/Detalle'),
-        Path('DataBase/Cinta')
-    ]
-    
-    archivos_eliminados = 0
-    for carpeta in carpetas_limpiar:
-        if carpeta.exists():
-            archivos = []
-            archivos.extend(glob.glob(str(carpeta / '*.xls')))
-            archivos.extend(glob.glob(str(carpeta / '*.xlsx')))
-            
-            for archivo in archivos:
-                try:
-                    os.remove(archivo)
-                    archivos_eliminados += 1
-                    print(f"   ✓ Eliminado: {Path(archivo).name}")
-                except Exception as e:
-                    print(f"   ⚠️ Error eliminando {Path(archivo).name}: {e}")
-    
-    print(f"\n✓ Total archivos eliminados: {archivos_eliminados}")
-    print("✅ CARPETAS LIMPIADAS")
+    # ========== LIMPIAR CARPETAS (DESHABILITADO) ==========
+    # print("\n" + "=" * 70)
+    # print("LIMPIANDO CARPETAS")
+    # print("=" * 70)
+    # 
+    # carpetas_limpiar = [
+    #     Path('DataBase/Consumos'),
+    #     Path('DataBase/Detalle'),
+    #     Path('DataBase/Cinta')
+    # ]
+    # 
+    # archivos_eliminados = 0
+    # for carpeta in carpetas_limpiar:
+    #     if carpeta.exists():
+    #         archivos = []
+    #         archivos.extend(glob.glob(str(carpeta / '*.xls')))
+    #         archivos.extend(glob.glob(str(carpeta / '*.xlsx')))
+    #         
+    #         for archivo in archivos:
+    #             try:
+    #                 os.remove(archivo)
+    #                 archivos_eliminados += 1
+    #                 print(f"   ✓ Eliminado: {Path(archivo).name}")
+    #             except Exception as e:
+    #                 print(f"   ⚠️ Error eliminando {Path(archivo).name}: {e}")
+    # 
+    # print(f"\n✓ Total archivos eliminados: {archivos_eliminados}")
+    # print("✅ CARPETAS LIMPIADAS")
     
 except Exception as e:
     print(f"\n❌ ERROR: {e}")

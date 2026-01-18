@@ -16,20 +16,53 @@ import glob
 def extraer_cinta_testigo(driver, wait, download_dir):
     """
     Extrae datos de Cinta Testigo usando el botón Exportar a Excel
+    Desde: día anterior, Hasta: hoy
     """
     print("\n" + "=" * 70)
     print("EXTRACCIÓN: CINTA TESTIGO")
     print("=" * 70)
     
+    # Calcular fechas
+    from datetime import datetime, timedelta
+    fecha_ayer = datetime.now() - timedelta(days=1)
+    fecha_hoy = datetime.now()
+    
+    fecha_desde_barras = fecha_ayer.strftime('%d/%m/%Y')
+    fecha_desde_sin_barras = fecha_ayer.strftime('%d%m%Y')
+    
+    fecha_hasta_barras = fecha_hoy.strftime('%d/%m/%Y')
+    fecha_hasta_sin_barras = fecha_hoy.strftime('%d%m%Y')
+    
+    print(f"\n   📅 Desde: {fecha_desde_barras} | Hasta: {fecha_hasta_barras}")
+    
     # Navegar a Cinta Testigo
-    print("\n[1/3] NAVEGANDO A CINTA TESTIGO")
+    print("\n[1/4] NAVEGANDO A CINTA TESTIGO")
     cinta_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Cinta Testigo")))
     cinta_link.click()
     print("   ✓ Navegación exitosa")
     time.sleep(2)
     
+    # Configurar fechas
+    print("\n[2/4] CONFIGURANDO FECHAS")
+    fecha_desde_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
+    fecha_desde_field.click()
+    time.sleep(0.2)
+    fecha_desde_field.send_keys('\ue009a\ue000')  # Ctrl+A
+    time.sleep(0.2)
+    fecha_desde_field.send_keys(fecha_desde_sin_barras)
+    print(f"   ✓ Fecha Desde: {fecha_desde_barras}")
+    
+    fecha_hasta_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtHasta")
+    fecha_hasta_field.click()
+    time.sleep(0.2)
+    fecha_hasta_field.send_keys('\ue009a\ue000')  # Ctrl+A
+    time.sleep(0.2)
+    fecha_hasta_field.send_keys(fecha_hasta_sin_barras)
+    print(f"   ✓ Fecha Hasta: {fecha_hasta_barras}")
+    time.sleep(1)
+    
     # Hacer clic en Procesar
-    print("\n[2/3] PROCESANDO")
+    print("\n[3/4] PROCESANDO")
     try:
         procesar_btn = wait.until(
             EC.element_to_be_clickable((By.ID, "ctl00_ContentPlaceHolder1_cmdProcesar"))
@@ -42,7 +75,7 @@ def extraer_cinta_testigo(driver, wait, download_dir):
         time.sleep(2)
     
     # Exportar a Excel
-    print("\n[3/3] EXPORTANDO A EXCEL")
+    print("\n[4/4] EXPORTANDO A EXCEL")
     
     max_intentos = 3
     archivo_guardado = False
@@ -116,20 +149,53 @@ def extraer_cinta_testigo(driver, wait, download_dir):
 def extraer_tickets_detalle(driver, wait, download_dir):
     """
     Extrae Tickets con Detalle para todas las sucursales
+    Desde: día anterior, Hasta: hoy
     """
     print("\n" + "=" * 70)
     print("EXTRACCIÓN: TICKETS CON DETALLE")
     print("=" * 70)
     
+    # Calcular fechas
+    from datetime import datetime, timedelta
+    fecha_ayer = datetime.now() - timedelta(days=1)
+    fecha_hoy = datetime.now()
+    
+    fecha_desde_barras = fecha_ayer.strftime('%d/%m/%Y')
+    fecha_desde_sin_barras = fecha_ayer.strftime('%d%m%Y')
+    
+    fecha_hasta_barras = fecha_hoy.strftime('%d/%m/%Y')
+    fecha_hasta_sin_barras = fecha_hoy.strftime('%d%m%Y')
+    
+    print(f"\n   📅 Desde: {fecha_desde_barras} | Hasta: {fecha_hasta_barras}")
+    
     # Navegar a Ticket con Detalle
-    print("\n[1/3] NAVEGANDO A TICKET CON DETALLE")
+    print("\n[1/4] NAVEGANDO A TICKET CON DETALLE")
     ticket_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Ticket con Detalle")))
     ticket_link.click()
     print("   ✓ Navegación exitosa")
     time.sleep(2)
     
+    # Configurar fechas
+    print("\n[2/4] CONFIGURANDO FECHAS")
+    fecha_desde_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
+    fecha_desde_field.click()
+    time.sleep(0.2)
+    fecha_desde_field.send_keys('\ue009a\ue000')  # Ctrl+A
+    time.sleep(0.2)
+    fecha_desde_field.send_keys(fecha_desde_sin_barras)
+    print(f"   ✓ Fecha Desde: {fecha_desde_barras}")
+    
+    fecha_hasta_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtHasta")
+    fecha_hasta_field.click()
+    time.sleep(0.2)
+    fecha_hasta_field.send_keys('\ue009a\ue000')  # Ctrl+A
+    time.sleep(0.2)
+    fecha_hasta_field.send_keys(fecha_hasta_sin_barras)
+    print(f"   ✓ Fecha Hasta: {fecha_hasta_barras}")
+    time.sleep(1)
+    
     # Detectar desplegable de sucursales
-    print("\n[2/3] DETECTANDO SUCURSALES")
+    print("\n[3/4] DETECTANDO SUCURSALES")
     dropdown = wait.until(EC.presence_of_element_located((By.ID, "ctl00_ContentPlaceHolder1_cmbSucursal")))
     select = Select(dropdown)
     options = select.options
@@ -138,14 +204,8 @@ def extraer_tickets_detalle(driver, wait, download_dir):
     for i, option in enumerate(options):
         print(f"   [{i}] {option.text}")
     
-    # Obtener fecha del campo "Hasta"
-    fecha_hasta_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtHasta")
-    fecha_con_barras = fecha_hasta_field.get_attribute('value')
-    fecha_sin_barras = fecha_con_barras.replace('/', '')
-    print(f"   Fecha a usar: {fecha_con_barras}")
-    
     # Procesar todas las sucursales
-    print("\n[3/3] PROCESANDO TODAS LAS SUCURSALES")
+    print("\n[4/4] PROCESANDO TODAS LAS SUCURSALES")
     
     archivos_guardados = []
     downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
@@ -165,16 +225,6 @@ def extraer_tickets_detalle(driver, wait, download_dir):
             print(f"   ✓ Sucursal seleccionada: {option.text}")
             time.sleep(1)
             
-            # Configurar fecha
-            fecha_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
-            fecha_field.click()
-            time.sleep(0.2)
-            fecha_field.send_keys('\ue009a\ue000')  # Ctrl+A
-            time.sleep(0.2)
-            fecha_field.send_keys(fecha_sin_barras)
-            print(f"   ✓ Fecha: {fecha_sin_barras}")
-            time.sleep(1)
-            
             # Exportar
             exportar_btn = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_dgExportar")
             exportar_btn.click()
@@ -182,7 +232,7 @@ def extraer_tickets_detalle(driver, wait, download_dir):
             
             # Preparar nombre
             nombre_sucursal = option.text.replace(' ', '_')
-            fecha_archivo = fecha_con_barras.replace('/', '_')
+            fecha_archivo = fecha_hasta_barras.replace('/', '_')
             
             # Esperar descarga
             print(f"   ⏳ Esperando descarga...")
@@ -242,38 +292,53 @@ def extraer_tickets_detalle(driver, wait, download_dir):
 
 def extraer_consumos(driver, wait, download_dir):
     """
-    Extrae Consumos por cada sucursal (usando checkboxes)
+    Extrae datos de Consumos por sucursal usando checkboxes
+    Desde: día anterior, Hasta: hoy
     """
     print("\n" + "=" * 70)
     print("EXTRACCIÓN: CONSUMOS POR SUCURSAL")
     print("=" * 70)
     
+    # Calcular fechas
+    from datetime import datetime, timedelta
+    fecha_ayer = datetime.now() - timedelta(days=1)
+    fecha_hoy = datetime.now()
+    
+    fecha_desde_barras = fecha_ayer.strftime('%d/%m/%Y')
+    fecha_desde_sin_barras = fecha_ayer.strftime('%d%m%Y')
+    
+    fecha_hasta_barras = fecha_hoy.strftime('%d/%m/%Y')
+    fecha_hasta_sin_barras = fecha_hoy.strftime('%d%m%Y')
+    
+    print(f"\n   📅 Desde: {fecha_desde_barras} | Hasta: {fecha_hasta_barras}")
+    
     # Navegar a Consumos
-    print("\n[1/4] NAVEGANDO A CONSUMOS")
+    print("\n[1/5] NAVEGANDO A CONSUMOS")
     driver.get("https://datakinga.com/Consumos.aspx")
     print("   ✓ Navegación exitosa")
     time.sleep(2)
     
-    # Configurar fecha
-    print("\n[2/4] CONFIGURANDO FECHA")
-    fecha_hasta_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtHasta")
-    fecha_con_barras = fecha_hasta_field.get_attribute('value')
-    fecha_sin_barras = fecha_con_barras.replace('/', '')
-    print(f"   Fecha: {fecha_con_barras}")
+    # Configurar fechas
+    print("\n[2/5] CONFIGURANDO FECHAS")
+    fecha_desde_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
+    fecha_desde_field.click()
+    time.sleep(0.2)
+    fecha_desde_field.send_keys('\ue009a\ue000')  # Ctrl+A
+    time.sleep(0.2)
+    fecha_desde_field.send_keys(fecha_desde_sin_barras)
+    print(f"   ✓ Fecha Desde: {fecha_desde_barras}")
     
-    fecha_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
-    fecha_field.click()
+    fecha_hasta_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtHasta")
+    fecha_hasta_field.click()
     time.sleep(0.2)
-    fecha_field.send_keys('\ue009a\ue000')  # Ctrl+A
+    fecha_hasta_field.send_keys('\ue009a\ue000')  # Ctrl+A
     time.sleep(0.2)
-    fecha_field.send_keys(fecha_sin_barras)
-    print(f"   ✓ Fecha configurada")
+    fecha_hasta_field.send_keys(fecha_hasta_sin_barras)
+    print(f"   ✓ Fecha Hasta: {fecha_hasta_barras}")
     time.sleep(1)
     
-    # Obtener checkboxes de sucursales
-    print("\n[3/4] OBTENIENDO SUCURSALES")
-    
     # Nombres de las sucursales en orden
+    print("\n[3/5] PREPARANDO SUCURSALES")
     sucursales = [
         "COSTAVERDE",
         "PASADENA", 
@@ -287,12 +352,14 @@ def extraer_consumos(driver, wait, download_dir):
         print(f"   {i+1}. {suc}")
     
     # Iterar sobre cada sucursal
-    print("\n[4/4] EXPORTANDO POR SUCURSAL")
+    print("\n[4/5] EXPORTANDO POR SUCURSAL")
     archivos_guardados = []
     downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
     
-    for i, nombre_sucursal in enumerate(sucursales):
-        print(f"\n   --- Procesando {i+1}/{len(sucursales)}: {nombre_sucursal} ---")
+    for i, sucursal_original in enumerate(sucursales):
+        # Convertir espacios a guiones bajos para el nombre del archivo
+        nombre_sucursal = sucursal_original.replace(' ', '_')
+        print(f"\n   --- Procesando {i+1}/{len(sucursales)}: {sucursal_original} ---")
         
         # Si no es la primera iteración, volver a navegar a Consumos
         if i > 0:
@@ -300,13 +367,21 @@ def extraer_consumos(driver, wait, download_dir):
             driver.get("https://datakinga.com/Consumos.aspx")
             time.sleep(2)
             
-            # Reconfigurar fecha
-            fecha_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
-            fecha_field.click()
+            # Reconfigurar fechas
+            fecha_desde_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
+            fecha_desde_field.click()
             time.sleep(0.2)
-            fecha_field.send_keys('\ue009a\ue000')  # Ctrl+A
+            fecha_desde_field.send_keys('\ue009a\ue000')  # Ctrl+A
             time.sleep(0.2)
-            fecha_field.send_keys(fecha_sin_barras)
+            fecha_desde_field.send_keys(fecha_desde_sin_barras)
+            time.sleep(0.5)
+            
+            fecha_hasta_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtHasta")
+            fecha_hasta_field.click()
+            time.sleep(0.2)
+            fecha_hasta_field.send_keys('\ue009a\ue000')  # Ctrl+A
+            time.sleep(0.2)
+            fecha_hasta_field.send_keys(fecha_hasta_sin_barras)
             time.sleep(0.5)
         
         max_intentos = 3
@@ -319,13 +394,21 @@ def extraer_consumos(driver, wait, download_dir):
                 driver.get("https://datakinga.com/Consumos.aspx")
                 time.sleep(2)
                 
-                # Reconfigurar fecha
-                fecha_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
-                fecha_field.click()
+                # Reconfigurar fechas
+                fecha_desde_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
+                fecha_desde_field.click()
                 time.sleep(0.2)
-                fecha_field.send_keys('\ue009a\ue000')  # Ctrl+A
+                fecha_desde_field.send_keys('\ue009a\ue000')  # Ctrl+A
                 time.sleep(0.2)
-                fecha_field.send_keys(fecha_sin_barras)
+                fecha_desde_field.send_keys(fecha_desde_sin_barras)
+                time.sleep(0.5)
+                
+                fecha_hasta_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtHasta")
+                fecha_hasta_field.click()
+                time.sleep(0.2)
+                fecha_hasta_field.send_keys('\ue009a\ue000')  # Ctrl+A
+                time.sleep(0.2)
+                fecha_hasta_field.send_keys(fecha_hasta_sin_barras)
                 time.sleep(0.5)
             
             # Esperar a que los checkboxes estén disponibles
@@ -362,8 +445,8 @@ def extraer_consumos(driver, wait, download_dir):
             exportar_btn.click()
             print(f"   ✓ Exportar clickeado")
             
-            # Preparar nombre
-            fecha_archivo = fecha_con_barras.replace('/', '_')
+            # Preparar nombre (usar fecha hasta = hoy)
+            fecha_archivo = fecha_hasta_barras.replace('/', '_')
             
             # Esperar descarga
             print(f"   ⏳ Esperando descarga...")
@@ -392,7 +475,7 @@ def extraer_consumos(driver, wait, download_dir):
                     print(f"   ... esperando ({waited}s)")
             
             if archivo_encontrado:
-                fecha_archivo = fecha_con_barras.replace('/', '_')
+                fecha_archivo = fecha_hasta_barras.replace('/', '_')
                 _, ext = os.path.splitext(archivo_encontrado)
                 nuevo_nombre = f"consumos_{nombre_sucursal}_{fecha_archivo}{ext}"
                 destino = os.path.join(download_dir, nuevo_nombre)
@@ -418,7 +501,11 @@ def extraer_consumos(driver, wait, download_dir):
         
         time.sleep(2)
     
-    print(f"\n✅ CONSUMOS POR SUCURSAL COMPLETADO")
-    print(f"   Archivos guardados: {len(archivos_guardados)}/{len(sucursales)}")
+    # Resumen final
+    print("\n[5/5] RESUMEN")
+    print("=" * 70)
+    print("✅ CONSUMOS COMPLETADO")
+    print("=" * 70)
+    print(f"\n   Total archivos guardados: {len(archivos_guardados)}/{len(sucursales)}")
     
     return archivos_guardados
