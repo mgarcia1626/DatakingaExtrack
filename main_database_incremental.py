@@ -112,8 +112,8 @@ try:
             print(f"   Total productos en archivos: {len(df_nuevos)}")
             print(f"   Fecha de carga: {fecha_carga}")
             
-            # 5. INSERTAR EN LA BASE DE DATOS
-            print("\n[5/5] INSERTANDO PRODUCTOS EN LA BASE DE DATOS")
+            # 5. INSERTAR O ACTUALIZAR EN LA BASE DE DATOS
+            print("\n[5/5] INSERTANDO/ACTUALIZANDO PRODUCTOS EN LA BASE DE DATOS")
             
             if len(df_existentes) == 0 or not tiene_fecha_carga:
                 # Crear tabla nueva con estructura correcta
@@ -124,10 +124,11 @@ try:
                         Codigo TEXT,
                         Articulo TEXT,
                         Sucursal TEXT,
-                        Fecha_Carga TEXT
+                        Fecha_Carga TEXT,
+                        PRIMARY KEY (Codigo, Articulo, Sucursal)
                     )
                 """)
-                print("   ✓ Tabla consumos creada con columna Fecha_Carga")
+                print("   ✓ Tabla consumos creada con columna Fecha_Carga y clave primaria")
                 
                 # Si había datos antiguos sin fecha, reinsertarlos con fecha actual
                 if len(df_existentes) > 0 and not tiene_fecha_carga:
@@ -135,22 +136,47 @@ try:
                     df_existentes.to_sql('consumos', conn, if_exists='append', index=False)
                     print(f"   ✓ {len(df_existentes)} productos existentes migrados con fecha")
             
-            # Insertar todos los productos nuevos (permitir duplicados de Codigo+Sucursal con diferentes fechas)
-            df_nuevos.to_sql('consumos', conn, if_exists='append', index=False)
-            print(f"   ✓ {len(df_nuevos)} productos insertados")
+            # Usar INSERT OR REPLACE para actualizar fecha si el producto ya existe
+            # Esto actualiza la fecha si (Codigo, Articulo, Sucursal) ya existe, o inserta si es nuevo
+            productos_insertados = 0
+            productos_actualizados = 0
+            
+            for _, row in df_nuevos.iterrows():
+                # Verificar si el producto ya existe
+                cursor.execute("""
+                    SELECT Fecha_Carga FROM consumos 
+                    WHERE Codigo = ? AND Articulo = ? AND Sucursal = ?
+                """, (row['Codigo'], row['Articulo'], row['Sucursal']))
+                
+                existe = cursor.fetchone()
+                
+                if existe:
+                    # Actualizar solo la fecha
+                    cursor.execute("""
+                        UPDATE consumos 
+                        SET Fecha_Carga = ?
+                        WHERE Codigo = ? AND Articulo = ? AND Sucursal = ?
+                    """, (fecha_carga, row['Codigo'], row['Articulo'], row['Sucursal']))
+                    productos_actualizados += 1
+                else:
+                    # Insertar nuevo producto
+                    cursor.execute("""
+                        INSERT INTO consumos (Familia, Codigo, Articulo, Sucursal, Fecha_Carga)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (row['Familia'], row['Codigo'], row['Articulo'], row['Sucursal'], fecha_carga))
+                    productos_insertados += 1
+            
+            print(f"   ✓ {productos_insertados} productos nuevos insertados")
+            print(f"   ✓ {productos_actualizados} productos existentes actualizados (fecha)")
             
             # Mostrar desglose por sucursal
             print("\n   Desglose por sucursal:")
             for sucursal in df_nuevos['Sucursal'].unique():
                 count = len(df_nuevos[df_nuevos['Sucursal'] == sucursal])
-                print(f"   • {sucursal}: {count} productos")
+                print(f"   • {sucursal}: {count} productos procesados")
             
-            # Crear índice para búsqueda rápida
-            try:
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_consumos_lookup ON consumos(Codigo, Sucursal, Fecha_Carga)")
-                print("\n   ✓ Índice creado para búsquedas optimizadas")
-            except:
-                pass
+            # Crear índice para búsqueda rápida (ya no es necesario con PRIMARY KEY)
+            # La clave primaria ya crea un índice automático
     
     # ========== TICKETS DETALLE - INSERTAR TODOS ==========
     print("\n" + "=" * 70)
