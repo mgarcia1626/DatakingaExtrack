@@ -1,13 +1,36 @@
 """
-DATAKINGA - Cargar datos a SQLite (Prueba con Consumos)
+⚠️⚠️⚠️ ADVERTENCIA CRÍTICA ⚠️⚠️⚠️
+==================================
+ESTE SCRIPT BORRA COMPLETAMENTE LA BASE DE DATOS Y LA RECREA DESDE CERO
+
+🚨 SOLO USAR PARA CARGA INICIAL O RESETEO COMPLETO
+🚨 NO EJECUTAR SI YA TIENES DATOS IMPORTANTES
+🚨 PARA ACTUALIZACIONES DIARIAS USA: run_daily_update.py
+==================================
 """
 import sqlite3
 import pandas as pd
 from pathlib import Path
 import glob
 import os
+from datetime import datetime
 
+# ========== CONFIRMACIÓN DE SEGURIDAD ==========
+print("\n" + "=" * 70)
+print("⚠️  ADVERTENCIA: BORRADO COMPLETO DE BASE DE DATOS  ⚠️".center(70))
 print("=" * 70)
+print("\nEste script ELIMINARÁ:")
+print("  ❌ Tabla: consumos (todos los registros)")
+print("  ❌ Tabla: tickets_detalle (todos los registros)")
+print("\n💡 Para actualizaciones diarias usa: python run_daily_update.py\n")
+
+confirmacion = input("Escribe 'SI BORRAR' para confirmar el borrado completo: ")
+
+if confirmacion != "SI BORRAR":
+    print("\n✅ Operación cancelada por seguridad")
+    exit(0)
+
+print("\n" + "=" * 70)
 print("DATAKINGA - CARGA A BASE DE DATOS")
 print("=" * 70)
 
@@ -90,16 +113,27 @@ try:
             # Combinar todos los DataFrames
             df_final = pd.concat(dataframes, ignore_index=True)
             
+            # Agregar fecha de carga
+            fecha_carga = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            df_final['Fecha_Carga'] = fecha_carga
+            
             print(f"\n   Total combinado: {len(df_final)} registros de {len(archivos)} sucursales")
+            print(f"   Fecha de carga: {fecha_carga}")
             print(f"\n   Primeras 5 filas:")
             print(df_final.head(5).to_string(index=False))
             
             # 3. CARGAR A SQLITE
             print("\n[3/3] CARGANDO A SQLITE")
+            print("   ⚠️ BORRANDO tabla 'consumos' existente...")
             cursor.execute("DROP TABLE IF EXISTS consumos")
+            print("   ⚠️ RECREANDO tabla 'consumos' desde cero...")
             df_final.to_sql('consumos', conn, if_exists='replace', index=False)
             print(f"   ✓ {len(df_final)} registros insertados en tabla 'consumos'")
-            print(f"   ✓ Columnas: Familia, Codigo, Articulo, Sucursal")
+            print(f"   ✓ Columnas: Familia, Codigo, Articulo, Sucursal, Fecha_Carga")
+            
+            # Crear índice para búsqueda optimizada
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_consumos_lookup ON consumos(Codigo, Sucursal, Fecha_Carga)")
+            print(f"   ✓ Índice creado para búsquedas optimizadas")
     
     # ========== DETALLE ==========
     print("\n" + "=" * 70)
@@ -130,7 +164,9 @@ try:
             df_list = []
             for i, archivo in enumerate(archivos_detalle):
                 # Extraer nombre exacto de sucursal del archivo
-                # Formato esperado desde extraction_functions: tickets_detalle_NOMBRESUCURSAL_DD_MM_YYYY_HH_MM_SS.xlsx
+                # Formatos soportados:
+                # 1. tickets_detalle_NOMBRESUCURSAL_DD_MM_YYYY_HH_MM_SS.xlsx
+                # 2. NOMBRESUCURSAL_DD_MM_YYYY.xlsx
                 nombre_archivo = os.path.basename(archivo).replace('.xlsx', '').replace('.xls', '')
                 partes = nombre_archivo.split('_')
                 
@@ -139,8 +175,12 @@ try:
                     # partes = [tickets, detalle, SUCURSAL..., DD, MM, YYYY, HH, MM, SS]
                     # Necesitamos todo entre posición 2 y los últimos 6 elementos (DD_MM_YYYY_HH_MM_SS)
                     nombre_sucursal = '_'.join(partes[2:-6])
+                elif len(partes) >= 4 and partes[-3].isdigit() and partes[-2].isdigit() and partes[-1].isdigit():
+                    # Formato: SUCURSAL_DD_MM_YYYY (termina con fecha)
+                    # Tomar todo excepto los últimos 3 elementos (DD_MM_YYYY)
+                    nombre_sucursal = '_'.join(partes[:-3])
                 else:
-                    # Formato manual: Ticket_SUCURSAL o similar
+                    # Formato desconocido: tomar todo menos el primer elemento
                     nombre_sucursal = '_'.join(partes[1:])
                 
                 print(f"\n   Procesando: {nombre_sucursal}")

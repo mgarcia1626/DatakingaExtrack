@@ -6,3 +6,4 @@ openpyxl
 python-dotenv
 streamlit
 plotly
+schedule
