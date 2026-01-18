@@ -1,6 +1,6 @@
 """
-DATAKINGA - Extracción Automática de Datos
-Modo: Selenium (Navegador Edge)
+DATAKINGA - Descarga de Datos para Creación Inicial de BD
+Descarga archivos con fechas personalizadas desde DataKinga
 """
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -10,9 +10,12 @@ from selenium.webdriver.edge.options import Options
 from pathlib import Path
 import time
 import os
+import sys
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-import sys
+
+# Agregar el directorio padre al path para importar módulos
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Importar funciones de extracción
 from FunctionsGrouping.extraction_functions import extraer_cinta_testigo, extraer_tickets_detalle, extraer_consumos
@@ -35,12 +38,25 @@ if len(sys.argv) >= 3:
         print("   Ejemplo: python main.py 01/01/2026 18/01/2026")
         sys.exit(1)
 else:
-    # Por defecto: desde ayer hasta hoy (siempre)
-    ayer = datetime.now() - timedelta(days=1)
-    hoy = datetime.now()
-    fecha_desde = ayer
-    fecha_hasta = hoy
-    print(f"📅 Modo automático: Descargando desde {ayer.strftime('%d/%m/%Y')} hasta {hoy.strftime('%d/%m/%Y')}")
+    # Modo automático: Leer fechas del .env o usar ayer por defecto
+    fecha_desde_env = os.getenv('FECHA_DESDE', '')
+    fecha_hasta_env = os.getenv('FECHA_HASTA', '')
+    
+    if fecha_desde_env and fecha_hasta_env:
+        # Usar fechas del .env
+        try:
+            fecha_desde = datetime.strptime(fecha_desde_env, '%d/%m/%Y')
+            fecha_hasta = datetime.strptime(fecha_hasta_env, '%d/%m/%Y')
+            print(f"📅 Modo .env: Descargando desde {fecha_desde_env} hasta {fecha_hasta_env}")
+        except ValueError:
+            print("❌ Error: Formato de fecha inválido en .env")
+            sys.exit(1)
+    else:
+        # Por defecto: solo ayer
+        ayer = datetime.now() - timedelta(days=1)
+        fecha_desde = ayer
+        fecha_hasta = ayer
+        print(f"📅 Modo automático: Descargando solo ayer ({ayer.strftime('%d/%m/%Y')})")
 
 # Configuración de Edge
 edge_options = Options()
