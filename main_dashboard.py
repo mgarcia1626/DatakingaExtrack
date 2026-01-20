@@ -181,6 +181,8 @@ opciones_menu = [
     "Facturación",
     "Análisis por Familia",
     "─────────────",
+    "Buscador de Productos en Tickets",
+    "─────────────",
     "Ranking de productos",
     "Productos mas vendidos", 
     "Productos menos vendidos", 
@@ -480,6 +482,148 @@ if menu_opcion == "Facturación":
     else:
         st.warning("⚠️ No hay datos de código para vincular con familias")
 
+# ========== VISTA: BUSCADOR DE PRODUCTOS EN TICKETS ==========
+elif menu_opcion == "Buscador de Productos en Tickets":
+    st.header("🔍 Buscador de Productos en Tickets")
+    st.markdown("Busca un producto y visualiza todos los tickets donde aparece, junto con los demás productos de cada ticket.")
+    
+    # Verificar que tenemos las columnas necesarias
+    if 'Descripción' not in df_tickets_filtrado.columns or 'Número' not in df_tickets_filtrado.columns:
+        st.error("⚠️ Faltan columnas necesarias (Descripción o Número) en los datos")
+    else:
+        # Selector de producto
+        productos_disponibles = sorted(df_tickets_filtrado['Descripción'].dropna().unique().tolist())
+        
+        if len(productos_disponibles) == 0:
+            st.warning("⚠️ No hay productos disponibles en el periodo seleccionado")
+        else:
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                producto_seleccionado = st.selectbox(
+                    "Selecciona un producto",
+                    productos_disponibles,
+                    index=0
+                )
+            
+            with col2:
+                st.metric("Total productos", len(productos_disponibles))
+            
+            st.markdown("---")
+            
+            # Buscar todos los tickets que contienen el producto seleccionado
+            tickets_con_producto = df_tickets_filtrado[
+                df_tickets_filtrado['Descripción'] == producto_seleccionado
+            ]['Número'].unique()
+            
+            if len(tickets_con_producto) == 0:
+                st.info(f"ℹ️ No se encontraron tickets con el producto '{producto_seleccionado}'")
+            else:
+                # Filtrar todos los datos de esos tickets
+                df_tickets_completos = df_tickets_filtrado[
+                    df_tickets_filtrado['Número'].isin(tickets_con_producto)
+                ].copy()
+                
+                # Calcular estadísticas
+                total_tickets = len(tickets_con_producto)
+                total_items_producto = df_tickets_filtrado[
+                    df_tickets_filtrado['Descripción'] == producto_seleccionado
+                ]['Cantidad'].sum()
+                
+                # Calcular facturación del producto
+                if 'Importe' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns:
+                    df_producto = df_tickets_filtrado[df_tickets_filtrado['Descripción'] == producto_seleccionado].copy()
+                    df_producto['Total'] = df_producto['Cantidad'] * df_producto['Importe']
+                    facturacion_producto = df_producto['Total'].sum()
+                else:
+                    facturacion_producto = 0
+                
+                # Mostrar métricas principales
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Tickets encontrados", f"{total_tickets:,}")
+                with col2:
+                    st.metric("Cantidad vendida", f"{int(total_items_producto):,}")
+                with col3:
+                    if facturacion_producto > 0:
+                        st.metric("Facturación total", f"${facturacion_producto:,.2f}")
+                
+                st.markdown("---")
+                
+                # Ordenar por fecha y hora
+                if 'Fecha' in df_tickets_completos.columns and 'Hora' in df_tickets_completos.columns:
+                    df_tickets_completos['Fecha_dt'] = pd.to_datetime(df_tickets_completos['Fecha'])
+                    df_tickets_completos['Hora_str'] = df_tickets_completos['Hora'].astype(str)
+                    df_tickets_completos = df_tickets_completos.sort_values(['Fecha_dt', 'Hora_str'], ascending=[False, False])
+                
+                # Agrupar por ticket y mostrar
+                st.subheader("📋 Detalle de Tickets")
+                
+                for i, numero_ticket in enumerate(tickets_con_producto[:50]):  # Limitar a 50 tickets para rendimiento
+                    df_ticket = df_tickets_completos[df_tickets_completos['Número'] == numero_ticket].copy()
+                    
+                    # Información del ticket
+                    fecha = df_ticket['Fecha'].iloc[0] if 'Fecha' in df_ticket.columns else "N/A"
+                    hora = df_ticket['Hora'].iloc[0] if 'Hora' in df_ticket.columns else "N/A"
+                    turno = df_ticket['Turno'].iloc[0] if 'Turno' in df_ticket.columns else "N/A"
+                    
+                    # Calcular total del ticket
+                    if 'Importe' in df_ticket.columns and 'Cantidad' in df_ticket.columns:
+                        df_ticket['Total_Item'] = df_ticket['Cantidad'] * df_ticket['Importe']
+                        total_ticket = df_ticket['Total_Item'].sum()
+                    else:
+                        total_ticket = 0
+                    
+                    # Expandir con información del ticket
+                    with st.expander(
+                        f"🎫 Ticket #{numero_ticket} - {fecha} {hora} - Total: ${total_ticket:,.2f}",
+                        expanded=(i < 3)  # Expandir los primeros 3
+                    ):
+                        # Información adicional
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.write(f"**📅 Fecha:** {fecha}")
+                        with col2:
+                            st.write(f"**🕐 Hora:** {hora}")
+                        with col3:
+                            st.write(f"**⏰ Turno:** {turno}")
+                        
+                        st.markdown("---")
+                        st.write("**Productos en este ticket:**")
+                        
+                        # Preparar tabla de productos
+                        columnas_mostrar = ['Descripción', 'Cantidad']
+                        if 'Importe' in df_ticket.columns:
+                            columnas_mostrar.append('Importe')
+                        if 'Total_Item' in df_ticket.columns:
+                            columnas_mostrar.append('Total_Item')
+                        
+                        df_display = df_ticket[columnas_mostrar].copy()
+                        
+                        # Renombrar columnas para mejor presentación
+                        if 'Total_Item' in df_display.columns:
+                            df_display = df_display.rename(columns={'Total_Item': 'Total'})
+                        
+                        # Resaltar el producto buscado
+                        def highlight_producto(row):
+                            if row['Descripción'] == producto_seleccionado:
+                                return ['background-color: #90EE90'] * len(row)
+                            return [''] * len(row)
+                        
+                        st.dataframe(
+                            df_display.style.apply(highlight_producto, axis=1),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        
+                        # Mostrar total del ticket
+                        if total_ticket > 0:
+                            st.markdown(f"**Total del ticket:** ${total_ticket:,.2f}")
+                
+                # Mostrar aviso si hay más tickets
+                if len(tickets_con_producto) > 50:
+                    st.info(f"ℹ️ Mostrando los primeros 50 tickets de {len(tickets_con_producto)} encontrados. Ajusta los filtros de fecha para ver menos resultados.")
+
 # ========== VISTA: PRODUCTOS MAS VENDIDOS ==========
 elif menu_opcion == "Productos mas vendidos":
     st.header("📦 Productos mas vendidos")
@@ -718,6 +862,24 @@ elif menu_opcion == "Relaciones por producto":
             tickets_con_producto = df_tickets_filtrado[
                 df_tickets_filtrado['Descripción'] == producto_seleccionado
             ]['Número'].unique()
+            
+            # Calcular cuántos tickets tienen SOLO este producto (solo en el ticket)
+            tickets_solo = 0
+            for ticket_num in tickets_con_producto:
+                productos_en_ticket = df_tickets_filtrado[
+                    df_tickets_filtrado['Número'] == ticket_num
+                ]['Descripción'].nunique()
+                if productos_en_ticket == 1:
+                    tickets_solo += 1
+            
+            # Mostrar métrica de tickets solo
+            col_metric1, col_metric2 = st.columns(2)
+            with col_metric1:
+                st.metric("Total de tickets con este producto", len(tickets_con_producto))
+            with col_metric2:
+                st.metric("Solo en el ticket", tickets_solo)
+            
+            st.markdown("---")
             
             # Obtener todos los productos en esos tickets (excepto el producto seleccionado)
             df_combos = df_tickets_filtrado[
