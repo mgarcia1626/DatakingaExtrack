@@ -433,34 +433,34 @@ try:
     conn.commit()
     print("\n✅ ACTUALIZACIÓN INCREMENTAL COMPLETADA")
     
-    # ========== LIMPIAR CARPETAS (DESHABILITADO) ==========
-    # print("\n" + "=" * 70)
-    # print("LIMPIANDO CARPETAS")
-    # print("=" * 70)
-    # 
-    # carpetas_limpiar = [
-    #     Path('DataBase/Consumos'),
-    #     Path('DataBase/Detalle'),
-    #     Path('DataBase/Cinta')
-    # ]
-    # 
-    # archivos_eliminados = 0
-    # for carpeta in carpetas_limpiar:
-    #     if carpeta.exists():
-    #         archivos = []
-    #         archivos.extend(glob.glob(str(carpeta / '*.xls')))
-    #         archivos.extend(glob.glob(str(carpeta / '*.xlsx')))
-    #         
-    #         for archivo in archivos:
-    #             try:
-    #                 os.remove(archivo)
-    #                 archivos_eliminados += 1
-    #                 print(f"   ✓ Eliminado: {Path(archivo).name}")
-    #             except Exception as e:
-    #                 print(f"   ⚠️ Error eliminando {Path(archivo).name}: {e}")
-    # 
-    # print(f"\n✓ Total archivos eliminados: {archivos_eliminados}")
-    # print("✅ CARPETAS LIMPIADAS")
+    # ========== LIMPIAR CARPETAS ==========
+    print("\n" + "=" * 70)
+    print("LIMPIANDO CARPETAS")
+    print("=" * 70)
+    
+    carpetas_limpiar = [
+        Path('DataBase/Consumos'),
+        Path('DataBase/Detalle'),
+        Path('DataBase/Cinta')
+    ]
+    
+    archivos_eliminados = 0
+    for carpeta in carpetas_limpiar:
+        if carpeta.exists():
+            archivos = []
+            archivos.extend(glob.glob(str(carpeta / '*.xls')))
+            archivos.extend(glob.glob(str(carpeta / '*.xlsx')))
+            
+            for archivo in archivos:
+                try:
+                    os.remove(archivo)
+                    archivos_eliminados += 1
+                    print(f"   ✓ Eliminado: {Path(archivo).name}")
+                except Exception as e:
+                    print(f"   ⚠️ Error eliminando {Path(archivo).name}: {e}")
+    
+    print(f"\n✓ Total archivos eliminados: {archivos_eliminados}")
+    print("✅ CARPETAS LIMPIADAS")
     
 except Exception as e:
     print(f"\n❌ ERROR: {e}")
