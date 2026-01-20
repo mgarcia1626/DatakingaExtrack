@@ -16,3 +16,9 @@
 [19/01/2026 07:59:51] [MANUAL] Proceso completado exitosamente (duración: 211.2s)
 [20/01/2026 17:09:44] [MANUAL] Iniciando proceso de actualización
 [20/01/2026 17:13:45] [MANUAL] Proceso completado exitosamente (duración: 240.5s)
+[20/01/2026 17:21:53] [SYSTEM] Scheduler iniciado - Horarios: 04:00, 16:30, 22:00
+[20/01/2026 17:23:48] [SYSTEM] Scheduler detenido por el usuario
+[20/01/2026 17:24:37] [SYSTEM] Scheduler iniciado - Horarios: 04:00, 16:30, 22:00
+[20/01/2026 17:27:24] [SYSTEM] Scheduler detenido por el usuario
+[20/01/2026 17:27:33] [MANUAL] Iniciando proceso de actualización
+[20/01/2026 17:31:28] [MANUAL] Proceso completado exitosamente (duración: 235.3s)

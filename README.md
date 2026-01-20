@@ -37,6 +37,26 @@ python main.py
 python main_database_incremental.py
 ```
 
+### Actualización Diaria Completa
+```powershell
+# Ejecución manual única
+python run_daily_update.py
+
+# Modo scheduler (se mantiene corriendo y ejecuta en horarios configurados)
+python run_daily_update.py --schedule
+
+# O usando el archivo .bat (Windows)
+start_scheduler.bat
+```
+
+**Horarios de ejecución automática:**
+Los horarios se configuran en el archivo `.env`:
+- `SCHEDULE_TIME_1` - Por defecto: 04:00
+- `SCHEDULE_TIME_2` - Por defecto: 16:30
+- `SCHEDULE_TIME_3` - Por defecto: 22:00
+
+Cuando ejecutas en modo `--schedule`, el script se mantiene corriendo continuamente y ejecutará automáticamente el proceso completo (extracción + actualización de BD) en los horarios configurados.
+
 ## 🚀 Deploy en Streamlit Cloud
 
 1. **Preparar el repositorio:**

@@ -56,6 +56,74 @@ def save_last_run(success):
     except Exception as e:
         print(f"⚠️ No se pudo guardar última ejecución: {e}")
 
+def git_push():
+    """Hace commit y push de los cambios al repositorio"""
+    try:
+        print("\n" + "=" * 70)
+        print("📤 SINCRONIZANDO CON REPOSITORIO GIT".center(70))
+        print("=" * 70 + "\n")
+        
+        # Verificar si hay cambios
+        result = subprocess.run(
+            ['git', 'status', '--porcelain'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        if not result.stdout.strip():
+            print("   ℹ️ No hay cambios para sincronizar")
+            return True
+        
+        print(f"   Cambios detectados:")
+        for line in result.stdout.strip().split('\n')[:5]:  # Mostrar primeros 5 archivos
+            print(f"   {line}")
+        if len(result.stdout.strip().split('\n')) > 5:
+            print(f"   ... y {len(result.stdout.strip().split('\n')) - 5} archivos más")
+        
+        # Git add
+        print("\n   📦 Agregando archivos...")
+        subprocess.run(['git', 'add', '.'], check=True)
+        print("   ✓ Archivos agregados")
+        
+        # Git commit
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+        commit_message = f"Actualización automática - {timestamp}"
+        print(f"\n   💾 Creando commit: '{commit_message}'")
+        subprocess.run(
+            ['git', 'commit', '-m', commit_message],
+            check=True,
+            capture_output=True
+        )
+        print("   ✓ Commit creado")
+        
+        # Git push
+        print("\n   🚀 Subiendo cambios al repositorio remoto...")
+        subprocess.run(
+            ['git', 'push'],
+            check=True,
+            capture_output=True
+        )
+        print("   ✓ Cambios sincronizados exitosamente")
+        print("\n" + "=" * 70 + "\n")
+        
+        return True
+        
+    except subprocess.CalledProcessError as e:
+        print(f"\n   ❌ Error en Git: {e}")
+        if e.stdout:
+            print(f"   Output: {e.stdout.decode() if isinstance(e.stdout, bytes) else e.stdout}")
+        if e.stderr:
+            print(f"   Error: {e.stderr.decode() if isinstance(e.stderr, bytes) else e.stderr}")
+        print("   ⚠️ La actualización de datos se completó, pero no se pudo sincronizar con Git")
+        print("=" * 70 + "\n")
+        return False
+    except Exception as e:
+        print(f"\n   ❌ Error inesperado en Git: {str(e)}")
+        print("   ⚠️ La actualización de datos se completó, pero no se pudo sincronizar con Git")
+        print("=" * 70 + "\n")
+        return False
+
 def print_header(text):
     """Imprime un encabezado formateado"""
     print("\n" + "=" * 70)
@@ -125,6 +193,13 @@ def main():
     save_last_run(success=True)
     log_execution(f"Proceso completado exitosamente (duración: {duracion.total_seconds():.1f}s)", "MANUAL")
     
+    # Sincronizar con Git
+    git_success = git_push()
+    if git_success:
+        log_execution("Cambios sincronizados con Git exitosamente", "MANUAL")
+    else:
+        log_execution("Advertencia: No se pudieron sincronizar cambios con Git", "MANUAL")
+    
     return True
 
 def run_scheduled():
@@ -182,6 +257,13 @@ def main_without_log():
     
     # Guardar información de última ejecución
     save_last_run(success=True)
+    
+    # Sincronizar con Git
+    git_success = git_push()
+    if git_success:
+        log_execution("Cambios sincronizados con Git exitosamente", "SCHEDULED")
+    else:
+        log_execution("Advertencia: No se pudieron sincronizar cambios con Git", "SCHEDULED")
     
     return True
 
