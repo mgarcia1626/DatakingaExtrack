@@ -5,5 +5,8 @@ __pycache__/
 *.csv
 *.log
 
+# Archivos de logs específicos
+DataBase/execution_log.txt
+
 # Permitir base de datos para Streamlit Cloud
 !DataBase/datakinga.db

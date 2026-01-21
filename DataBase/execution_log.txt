@@ -25,3 +25,5 @@
 [20/01/2026 17:31:31] [MANUAL] Cambios sincronizados con Git exitosamente
 [20/01/2026 17:32:59] [SYSTEM] Scheduler iniciado - Horarios: 04:00, 16:30, 22:00
 [20/01/2026 22:00:00] [SCHEDULED] Iniciando ejecución programada
+[20/01/2026 22:04:07] [SCHEDULED] Advertencia: No se pudieron sincronizar cambios con Git
+[20/01/2026 22:04:07] [SCHEDULED] Ejecución programada completada exitosamente (duración: 247.6s)
