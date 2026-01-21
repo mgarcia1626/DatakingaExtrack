@@ -24,3 +24,4 @@
 [20/01/2026 17:31:28] [MANUAL] Proceso completado exitosamente (duración: 235.3s)
 [20/01/2026 17:31:31] [MANUAL] Cambios sincronizados con Git exitosamente
 [20/01/2026 17:32:59] [SYSTEM] Scheduler iniciado - Horarios: 04:00, 16:30, 22:00
+[20/01/2026 22:00:00] [SCHEDULED] Iniciando ejecución programada
