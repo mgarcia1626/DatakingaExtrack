@@ -1,9 +1,22 @@
-﻿
+# Browser automation
 selenium
 webdriver-manager
+playwright
+
+# Data processing
 pandas
 openpyxl
+xlrd
+
+# Environment & config
 python-dotenv
+
+# Dashboard
 streamlit
 plotly
+
+# Database
+supabase
+
+# Scheduler (local dev only)
 schedule

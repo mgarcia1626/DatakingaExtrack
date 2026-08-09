@@ -4,13 +4,12 @@ Visualización de datos con Streamlit
 """
 import streamlit as st
 import pandas as pd
-import sqlite3
 import os
-from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 import plotly.express as px
 import plotly.graph_objects as go
+from FunctionsGrouping.supabase_client import get_client, fetch_tickets, fetch_consumos
 
 # Cargar variables de entorno
 load_dotenv()
@@ -27,68 +26,283 @@ st.set_page_config(
 st.title("📊 DataKinga Dashboard")
 st.markdown("---")
 
-# Función para obtener la ruta de la base de datos
-def get_database_path():
-    """Busca la base de datos en múltiples ubicaciones posibles"""
-    possible_paths = [
-        Path('DataBase/datakinga.db'),  # Desarrollo local
-        Path('/mount/src/datakingaextrack/DataBase/datakinga.db'),  # Streamlit Cloud
-        Path(__file__).parent / 'DataBase' / 'datakinga.db',  # Relativo al script
-    ]
-    
-    for path in possible_paths:
-        if path.exists():
-            return str(path)
-    
-    # Si no se encuentra, mostrar error con ubicaciones buscadas
-    st.error("❌ No se encontró la base de datos en ninguna ubicación")
-    st.info("Ubicaciones buscadas:")
-    for p in possible_paths:
-        st.write(f"- {p.absolute()}")
-    st.stop()
-    
-    return None
-
 # Cargar datos
-@st.cache_data
+@st.cache_data(ttl=300)
 def cargar_datos():
-    """Carga los datos de la base de datos SQLite"""
-    db_path = get_database_path()
-    
-    # Crear conexión dentro de la función (mejor para el caché de Streamlit)
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    
     try:
-        # Cargar tickets_detalle
-        df_tickets = pd.read_sql_query("SELECT * FROM tickets_detalle", conn)
-        
-        # Cargar consumos - solo la versión más reciente de cada Codigo+Sucursal
-        df_consumos = pd.read_sql_query("""
-            SELECT c1.* 
-            FROM consumos c1
-            INNER JOIN (
-                SELECT Codigo, Sucursal, MAX(Fecha_Carga) as max_fecha
-                FROM consumos
-                GROUP BY Codigo, Sucursal
-        ) c2 ON c1.Codigo = c2.Codigo 
-            AND c1.Sucursal = c2.Sucursal 
-            AND c1.Fecha_Carga = c2.max_fecha
-        """, conn)
-        
-        # Convertir columnas numéricas
+        client = get_client()
+        df_tickets = fetch_tickets(client)
+        df_consumos = fetch_consumos(client)
         if 'Cantidad' in df_tickets.columns:
             df_tickets['Cantidad'] = pd.to_numeric(df_tickets['Cantidad'], errors='coerce')
         if 'Importe' in df_tickets.columns:
             df_tickets['Importe'] = pd.to_numeric(df_tickets['Importe'], errors='coerce')
-        
         return df_tickets, df_consumos
-        
     except Exception as e:
-        st.error(f"❌ Error al cargar datos de la base de datos: {str(e)}")
-        st.info("Verifica que la base de datos tenga las tablas 'tickets_detalle' y 'consumos'")
-        raise
-    finally:
-        conn.close()
+        st.error(f'Error al cargar datos desde Supabase: {str(e)}')
+        st.info('Verifica que SUPABASE_URL y SUPABASE_KEY esten configurados.')
+        st.stop()
+
+
+df_tickets, df_consumos = cargar_datos()
+
+# Sidebar - Filtros globales
+st.sidebar.header("🔍 Filtros")
+
+# Filtro por sucursal (OBLIGATORIO - solo una)
+if 'Sucursal' in df_tickets.columns:
+    sucursales = sorted(df_tickets['Sucursal'].dropna().unique().tolist())
+    if len(sucursales) > 0:
+        sucursal_seleccionada = st.sidebar.selectbox(
+            "Sucursal",
+            sucursales,
+            index=0
+        )
+        df_tickets_filtrado = df_tickets[df_tickets['Sucursal'] == sucursal_seleccionada]
+    else:
+        st.sidebar.error("⚠️ No hay sucursales disponibles")
+        df_tickets_filtrado = df_tickets
+else:
+    st.sidebar.error("⚠️ No hay columna Sucursal")
+    df_tickets_filtrado = df_tickets
+
+# Filtro por rango de fechas
+if 'Fecha' in df_tickets_filtrado.columns:
+    df_tickets_filtrado = df_tickets_filtrado.copy()
+    df_tickets_filtrado['Fecha_dt'] = pd.to_datetime(df_tickets_filtrado['Fecha'])
+    fecha_min = df_tickets_filtrado['Fecha_dt'].min().date()
+    fecha_max = df_tickets_filtrado['Fecha_dt'].max().date()
+    
+    st.sidebar.markdown("**Rango de Fechas**")
+    col1, col2 = st.sidebar.columns(2)
+    
+    with col1:
+        fecha_desde = st.date_input(
+            "Desde",
+            value=fecha_min,
+            min_value=fecha_min,
+            max_value=fecha_max
+        )
+    
+    with col2:
+        fecha_hasta = st.date_input(
+            "Hasta",
+            value=fecha_max,
+            min_value=fecha_min,
+            max_value=fecha_max
+        )
+    
+    # Aplicar filtro de fechas
+    df_tickets_filtrado = df_tickets_filtrado[
+        (df_tickets_filtrado['Fecha_dt'].dt.date >= fecha_desde) & 
+        (df_tickets_filtrado['Fecha_dt'].dt.date <= fecha_hasta)
+    ]
+else:
+    st.sidebar.warning("⚠️ No hay columna Fecha")
+
+# Filtro por turno (desplegable con opción Todos)
+if 'Turno' in df_tickets_filtrado.columns:
+    turnos_disponibles = sorted(df_tickets_filtrado['Turno'].dropna().unique().tolist())
+    if len(turnos_disponibles) > 0:
+        # Agregar opción "Todos" al inicio
+        opciones_turno = ["Todos"] + turnos_disponibles
+        
+        turno_seleccionado = st.sidebar.selectbox(
+            "Turno",
+            opciones_turno,
+            index=0  # Por defecto "Todos"
+        )
+        
+        # Aplicar filtro de turnos solo si no es "Todos"
+        if turno_seleccionado != "Todos":
+            df_tickets_filtrado = df_tickets_filtrado[df_tickets_filtrado['Turno'] == turno_seleccionado]
+
+# Última actualización (pequeño, debajo del filtro de turno)
+st.sidebar.markdown("---")
+last_run_time = os.getenv('LAST_RUN_TIME', '')
+last_run_status = os.getenv('LAST_RUN_STATUS', '')
+
+if last_run_time:
+    status_icon = "✅" if last_run_status == "SUCCESS" else "❌"
+    st.sidebar.caption(f"🕐 Última actualización: {last_run_time} {status_icon}")
+
+# Menú de navegación
+st.sidebar.markdown("---")
+st.sidebar.header("📋 Menú")
+
+# UN SOLO radio button con todas las opciones y separadores
+opciones_menu = [
+    "Facturación",
+    "Análisis por Familia",
+    "─────────────",
+    "Buscador de Productos en Tickets",
+    "─────────────",
+    "Ranking de productos",
+    "Productos mas vendidos", 
+    "Productos menos vendidos", 
+    "Productos mejor facturacion", 
+    "Productos peor facturacion",
+    "─────────────",
+    "Relaciones por producto", 
+    "Relaciones por familia",
+    "─────────────",
+    "Creación de Combos",
+    "─────────────",
+    "Análisis de regalos"
+]
+
+# Inicializar session_state si no existe
+if 'menu_seleccion' not in st.session_state:
+    st.session_state.menu_seleccion = "Facturación"
+
+# Encontrar el índice de la selección actual
+try:
+    index_actual = opciones_menu.index(st.session_state.menu_seleccion)
+except ValueError:
+    index_actual = 0
+
+menu_opcion_temp = st.sidebar.radio(
+    "Selecciona una vista",
+    opciones_menu,
+    index=index_actual,
+    label_visibility="collapsed"
+)
+
+# Si se selecciona un separador, mantener la última selección válida
+if menu_opcion_temp.startswith("─"):
+    menu_opcion = st.session_state.menu_seleccion
+else:
+    menu_opcion = menu_opcion_temp
+    st.session_state.menu_seleccion = menu_opcion
+
+# ========== VISTA: FACTURACIÓN ==========
+if menu_opcion == "Facturación":
+    st.header("💰 Facturación")
+    
+    # Calcular métricas del periodo
+    if 'Importe' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns:
+        # Facturación total del periodo
+        df_temp_metricas = df_tickets_filtrado.copy()
+        df_temp_metricas['Importe_Total'] = df_temp_metricas['Cantidad'] * df_temp_metricas['Importe']
+        facturacion_total_periodo = df_temp_metricas['Importe_Total'].sum()
+        
+        # Cantidad de días facturados (días con al menos una venta)
+        if 'Fecha' in df_tickets_filtrado.columns:
+            dias_facturados = df_tickets_filtrado['Fecha'].nunique()
+        else:
+            dias_facturados = 0
+        
+        # Mostrar métricas
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Facturación Total del Periodo", f"${facturacion_total_periodo:,.2f}")
+        with col2:
+            st.metric("Cantidad de Días Facturados", f"{dias_facturados}")
+        
+        st.markdown("---")
+    
+    # Gráfico de barras: Facturación por día
+    st.subheader("📊 Facturación Diaria")
+    if 'Fecha' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
+        if 'Turno' in df_tickets_filtrado.columns:
+            # Calcular importe total (Cantidad * Importe unitario)
+            df_temp = df_tickets_filtrado.copy()
+            df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
+            # Facturación por día y turno (barras apiladas)
+            facturacion_diaria_turno = df_temp.groupby(['Fecha', 'Turno'])['Importe_Total'].sum().reset_index()
+            facturacion_diaria_turno = facturacion_diaria_turno.rename(columns={'Importe_Total': 'Importe'})
+            facturacion_diaria_turno['Fecha'] = pd.to_datetime(facturacion_diaria_turno['Fecha'])
+            facturacion_diaria_turno = facturacion_diaria_turno.sort_values('Fecha')
+            
+            # Crear rango completo de fechas (incluyendo días faltantes)
+            fecha_min = facturacion_diaria_turno['Fecha'].min()
+            fecha_max = facturacion_diaria_turno['Fecha'].max()
+            todas_fechas = pd.date_range(start=fecha_min, end=fecha_max, freq='D')
+            todos_turnos = facturacion_diaria_turno['Turno'].unique()
+            
+            # Crear DataFrame con todas las combinaciones de fecha y turno
+            index_completo = pd.MultiIndex.from_product([todas_fechas, todos_turnos], names=['Fecha', 'Turno'])
+            df_completo = pd.DataFrame(index=index_completo).reset_index()
+            
+            # Merge con los datos reales
+            facturacion_diaria_turno = df_completo.merge(
+                facturacion_diaria_turno,
+                on=['Fecha', 'Turno'],
+                how='left'
+            )
+            facturacion_diaria_turno['Importe'] = facturacion_diaria_turno['Importe'].fillna(0)
+            
+            # Crear etiquetas de fecha con día de la semana en español
+            dias_semana = {
+                'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
+                'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
+            }
+            facturacion_diaria_turno['Fecha_Label'] = facturacion_diaria_turno['Fecha'].apply(
+                lambda x: f"{dias_semana[x.strftime('%A')]}<br>{x.day}/{x.month}"
+            )
+            
+            # Cargar datos
+@st.cache_data(ttl=300)
+def cargar_datos():
+    try:
+        client = get_client()
+        df_tickets = fetch_tickets(client)
+        df_consumos = fetch_consumos(client)
+        if 'Cantidad' in df_tickets.columns:
+            df_tickets['Cantidad'] = pd.to_numeric(df_tickets['Cantidad'], errors='coerce')
+        if 'Importe' in df_tickets.columns:
+            df_tickets['Importe'] = pd.to_numeric(df_tickets['Importe'], errors='coerce')
+        return df_tickets, df_consumos
+    except Exception as e:
+        st.error(f'Error al cargar datos desde Supabase: {str(e)}')
+        st.info('Verifica que SUPABASE_URL y SUPABASE_KEY esten configurados.')
+        st.stop()
+
+board Interactivo
+Visualización de datos con Streamlit
+"""
+import streamlit as st
+import pandas as pd
+import os
+from datetime import datetime
+from dotenv import load_dotenv
+import plotly.express as px
+import plotly.graph_objects as go
+from FunctionsGrouping.supabase_client import get_client, fetch_tickets, fetch_consumos
+from FunctionsGrouping.supabase_client import get_client, fetch_tickets, fetch_consumos
+
+# Cargar variables de entorno
+load_dotenv()
+
+# Configuración de la página
+st.set_page_config(
+    page_title="DataKinga Dashboard",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Título principal
+st.title("📊 DataKinga Dashboard")
+st.markdown("---")
+
+# Cargar datos
+@st.cache_data(ttl=300)
+def cargar_datos():
+    try:
+        client = get_client()
+        df_tickets = fetch_tickets(client)
+        df_consumos = fetch_consumos(client)
+        if 'Cantidad' in df_tickets.columns:
+            df_tickets['Cantidad'] = pd.to_numeric(df_tickets['Cantidad'], errors='coerce')
+        if 'Importe' in df_tickets.columns:
+            df_tickets['Importe'] = pd.to_numeric(df_tickets['Importe'], errors='coerce')
+        return df_tickets, df_consumos
+    except Exception as e:
+        st.error(f'Error al cargar datos desde Supabase: {str(e)}')
+        st.info('Verifica que SUPABASE_URL y SUPABASE_KEY esten configurados.')
+        st.stop()
+
 
 df_tickets, df_consumos = cargar_datos()
 
