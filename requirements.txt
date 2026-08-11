@@ -1,7 +1,7 @@
-# Browser automation
+﻿# Browser automation
 selenium
 webdriver-manager
-playwright
+playwright==1.44.0
 
 # Data processing
 pandas
