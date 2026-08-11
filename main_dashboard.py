@@ -165,7 +165,8 @@ menu_opcion_temp = st.sidebar.radio(
     "Selecciona una vista",
     opciones_menu,
     index=index_actual,
-    label_visibility="collapsed"
+    label_visibility="collapsed",
+    key="menu_principal"
 )
 
 # Si se selecciona un separador, mantener la última selección válida
