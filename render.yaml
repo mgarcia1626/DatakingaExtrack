@@ -2,8 +2,8 @@
   # Web Service: Streamlit Dashboard
   - type: web
     name: datakinga-dashboard
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: python
+    buildCommand: pip install -r requirements.txt && playwright install chromium
     startCommand: streamlit run main_dashboard.py --server.port  --server.address 0.0.0.0
     envVars:
       - key: DATAKINGA_USER
@@ -18,9 +18,9 @@
   # Cron Job: Daily data extraction (3x per day)
   - type: cron
     name: datakinga-extractor
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: python
     schedule: "0 7,20,1 * * *"
+    buildCommand: pip install -r requirements.txt && playwright install chromium
     startCommand: python main_render.py
     envVars:
       - key: DATAKINGA_USER
