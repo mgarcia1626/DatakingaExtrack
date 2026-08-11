@@ -258,52 +258,6 @@ def cargar_datos():
         st.info('Verifica que SUPABASE_URL y SUPABASE_KEY esten configurados.')
         st.stop()
 
-board Interactivo
-Visualización de datos con Streamlit
-"""
-import streamlit as st
-import pandas as pd
-import os
-from datetime import datetime
-from dotenv import load_dotenv
-import plotly.express as px
-import plotly.graph_objects as go
-from FunctionsGrouping.supabase_client import get_client, fetch_tickets, fetch_consumos
-from FunctionsGrouping.supabase_client import get_client, fetch_tickets, fetch_consumos
-
-# Cargar variables de entorno
-load_dotenv()
-
-# Configuración de la página
-st.set_page_config(
-    page_title="DataKinga Dashboard",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Título principal
-st.title("📊 DataKinga Dashboard")
-st.markdown("---")
-
-# Cargar datos
-@st.cache_data(ttl=300)
-def cargar_datos():
-    try:
-        client = get_client()
-        df_tickets = fetch_tickets(client)
-        df_consumos = fetch_consumos(client)
-        if 'Cantidad' in df_tickets.columns:
-            df_tickets['Cantidad'] = pd.to_numeric(df_tickets['Cantidad'], errors='coerce')
-        if 'Importe' in df_tickets.columns:
-            df_tickets['Importe'] = pd.to_numeric(df_tickets['Importe'], errors='coerce')
-        return df_tickets, df_consumos
-    except Exception as e:
-        st.error(f'Error al cargar datos desde Supabase: {str(e)}')
-        st.info('Verifica que SUPABASE_URL y SUPABASE_KEY esten configurados.')
-        st.stop()
-
-
 df_tickets, df_consumos = cargar_datos()
 
 # Sidebar - Filtros globales
