@@ -66,9 +66,9 @@ def _nav_to(page: Page, link_text: str):
 
 
 def _nav_to(page: Page, link_text: str):
-    page.goto('https://datakinga.com/', timeout=30000)
+    page.goto('https://datakinga.com/', timeout=60000, wait_until='domcontentloaded')
     page.wait_for_load_state('domcontentloaded', timeout=60000)
-    page.wait_for_selector(f'text={link_text}', timeout=20000)
+    page.wait_for_selector(f'text={link_text}', timeout=30000)
     page.click(f'text={link_text}')
     page.wait_for_load_state('domcontentloaded', timeout=60000)
     time.sleep(2)
@@ -109,9 +109,9 @@ def extraer_cinta_testigo(page: Page, fecha_desde: datetime, fecha_hasta: dateti
 
     # Navegar
     print("[1/4] Navegando a Cinta Testigo...")
-    page.click("text=Cinta Testigo")
-    page.wait_for_load_state("domcontentloaded", timeout=60000)
-    time.sleep(2)
+    _nav_to(page, "Cinta Testigo")
+
+
 
     # Fechas
     print("[2/4] Configurando fechas...")
