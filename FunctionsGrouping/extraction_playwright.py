@@ -1,4 +1,4 @@
-﻿"""
+"""
 DATAKINGA - Extraccion con Playwright (headless Chromium)
 Reemplaza Selenium+Edge para funcionar en Render (Linux, sin GUI)
 """
@@ -49,38 +49,28 @@ def _sucursal_permitida(nombre, allowed):
 
 
 def _nav_to(page: Page, link_text: str):
+    page.goto('https://datakinga.com/', timeout=60000, wait_until='domcontentloaded')
+    page.wait_for_selector(f'text={link_text}', timeout=30000)
+    page.click(f'text={link_text}')
+    page.wait_for_load_state('domcontentloaded', timeout=60000)
+    time.sleep(3)
+
+
+def _nav_to(page: Page, link_text: str):
     page.goto('https://datakinga.com/', timeout=30000)
-    page.wait_for_load_state('networkidle', timeout=20000)
+    page.wait_for_load_state('domcontentloaded', timeout=60000)
     page.wait_for_selector(f'text={link_text}', timeout=20000)
     page.click(f'text={link_text}')
-    page.wait_for_load_state('networkidle', timeout=20000)
+    page.wait_for_load_state('domcontentloaded', timeout=60000)
     time.sleep(2)
 
 
 def _nav_to(page: Page, link_text: str):
     page.goto('https://datakinga.com/', timeout=30000)
-    page.wait_for_load_state('networkidle', timeout=20000)
+    page.wait_for_load_state('domcontentloaded', timeout=60000)
     page.wait_for_selector(f'text={link_text}', timeout=20000)
     page.click(f'text={link_text}')
-    page.wait_for_load_state('networkidle', timeout=20000)
-    time.sleep(2)
-
-
-def _nav_to(page: Page, link_text: str):
-    page.goto('https://datakinga.com/', timeout=30000)
-    page.wait_for_load_state('networkidle', timeout=20000)
-    page.wait_for_selector(f'text={link_text}', timeout=20000)
-    page.click(f'text={link_text}')
-    page.wait_for_load_state('networkidle', timeout=20000)
-    time.sleep(2)
-
-
-def _nav_to(page: Page, link_text: str):
-    page.goto('https://datakinga.com/', timeout=30000)
-    page.wait_for_load_state('networkidle', timeout=20000)
-    page.wait_for_selector(f'text={link_text}', timeout=20000)
-    page.click(f'text={link_text}')
-    page.wait_for_load_state('networkidle', timeout=20000)
+    page.wait_for_load_state('domcontentloaded', timeout=60000)
     time.sleep(2)
 
 
@@ -94,7 +84,7 @@ def login(page: Page, username: str, password: str):
     page.fill("#txtUsuario", username)
     page.fill("#txtClave", password)
     page.click("#Ingresar")
-    page.wait_for_load_state("networkidle", timeout=20000)
+    page.wait_for_load_state("domcontentloaded", timeout=60000)
     print("   v Login exitoso")
 
 
@@ -120,7 +110,7 @@ def extraer_cinta_testigo(page: Page, fecha_desde: datetime, fecha_hasta: dateti
     # Navegar
     print("[1/4] Navegando a Cinta Testigo...")
     page.click("text=Cinta Testigo")
-    page.wait_for_load_state("networkidle", timeout=15000)
+    page.wait_for_load_state("domcontentloaded", timeout=60000)
     time.sleep(2)
 
     # Fechas
@@ -140,7 +130,7 @@ def extraer_cinta_testigo(page: Page, fecha_desde: datetime, fecha_hasta: dateti
     print("[4/4] Exportando a Excel...")
     for intento in range(1, 4):
         try:
-            with page.expect_download(timeout=30000) as dl_info:
+            with page.expect_download(timeout=90000) as dl_info:
                 page.click("#ctl00_ContentPlaceHolder1_cmdExportar")
             download = dl_info.value
             df = _df_from_download(download)
@@ -211,7 +201,7 @@ def extraer_tickets_detalle(page: Page, fecha_desde: datetime, fecha_hasta: date
                 time.sleep(1)
 
                 # Exportar
-                with page.expect_download(timeout=30000) as dl_info:
+                with page.expect_download(timeout=90000) as dl_info:
                     page.click("#ctl00_ContentPlaceHolder1_dgExportar")
                 download = dl_info.value
                 df = _df_from_download(download)
@@ -273,7 +263,7 @@ def extraer_consumos(page: Page, fecha_desde: datetime, fecha_hasta: datetime) -
             try:
                 # Navegar a Consumos (siempre recargamos para estado limpio)
                 page.goto("https://datakinga.com/Consumos.aspx", timeout=20000)
-                page.wait_for_load_state("networkidle", timeout=15000)
+                page.wait_for_load_state("domcontentloaded", timeout=60000)
                 time.sleep(2)
 
                 # Configurar fechas
@@ -304,7 +294,7 @@ def extraer_consumos(page: Page, fecha_desde: datetime, fecha_hasta: datetime) -
                 time.sleep(3)
 
                 # Exportar
-                with page.expect_download(timeout=30000) as dl_info:
+                with page.expect_download(timeout=90000) as dl_info:
                     page.click("#ctl00_ContentPlaceHolder1_cmdExportar")
                 download = dl_info.value
                 df = _df_from_download(download)
