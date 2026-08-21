@@ -183,6 +183,34 @@ def procesar_consumos(consumos_raw: list) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _month_ranges(desde: datetime, hasta: datetime):
+    """Split a date range into monthly chunks."""
+    chunks = []
+    current = desde.replace(day=1)
+    while current <= hasta:
+        chunk_end = (current.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        chunk_end = min(chunk_end, hasta)
+        chunks.append((current if current >= desde else desde, chunk_end))
+        current = chunk_end + timedelta(days=1)
+    return chunks
+
+
+def _make_browser(p):
+    browser = p.chromium.launch(
+        headless=True,
+        args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled'],
+    )
+    context = browser.new_context(
+        accept_downloads=True,
+        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    )
+    return browser, context.new_page()
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -197,76 +225,50 @@ def main():
         print("ERROR: Define DATAKINGA_USER y DATAKINGA_PASSWORD en .env")
         sys.exit(1)
 
-    # Supabase client
     supabase = get_client()
     print("v Supabase client inicializado")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-blink-features=AutomationControlled',
-            ]
-        )
-        context = browser.new_context(
-            accept_downloads=True,
-            user_agent=(
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/120.0.0.0 Safari/537.36'
-            )
-        )
-        page = context.new_page()
+    chunks = _month_ranges(fecha_desde, fecha_hasta)
+    print(f"Procesando {len(chunks)} mes(es): " + ", ".join(f"{d.strftime('%d/%m/%Y')}->{h.strftime('%d/%m/%Y')}" for d, h in chunks))
 
-        try:
-            # 1. Login
-            print("\n" + "=" * 70)
-            print("FASE 1: LOGIN")
-            print("=" * 70)
-            login(page, username, password)
+    for chunk_idx, (chunk_desde, chunk_hasta) in enumerate(chunks, 1):
+        print(f"\n{'='*70}")
+        print(f"BLOQUE {chunk_idx}/{len(chunks)}: {chunk_desde.strftime('%d/%m/%Y')} -> {chunk_hasta.strftime('%d/%m/%Y')}")
+        print("=" * 70)
 
-            # 2. Cinta Testigo
-            print("\n" + "=" * 70)
-            print("FASE 2: CINTA TESTIGO")
-            print("=" * 70)
-            df_cinta_raw = extraer_cinta_testigo(page, fecha_desde, fecha_hasta)
-            df_cinta = procesar_cinta(df_cinta_raw)
+        with sync_playwright() as p:
+            browser, page = _make_browser(p)
+            try:
+                login(page, username, password)
 
-            # 3. Tickets con Detalle
-            print("\n" + "=" * 70)
-            print("FASE 3: TICKETS CON DETALLE")
-            print("=" * 70)
-            tickets_raw = extraer_tickets_detalle(page, fecha_desde, fecha_hasta)
-            df_tickets = procesar_tickets(tickets_raw, df_cinta)
+                print("\n--- CINTA TESTIGO ---")
+                df_cinta_raw = extraer_cinta_testigo(page, chunk_desde, chunk_hasta)
+                df_cinta = procesar_cinta(df_cinta_raw)
 
-            # 4. Consumos
-            print("\n" + "=" * 70)
-            print("FASE 4: CONSUMOS")
-            print("=" * 70)
-            consumos_raw = extraer_consumos(page, fecha_desde, fecha_hasta)
-            df_consumos = procesar_consumos(consumos_raw)
+                print("\n--- TICKETS CON DETALLE ---")
+                tickets_raw = extraer_tickets_detalle(page, chunk_desde, chunk_hasta)
+                df_tickets = procesar_tickets(tickets_raw, df_cinta)
 
-        except Exception as e:
-            import traceback
-            print(f"\nERROR durante extraccion: {e}")
-            traceback.print_exc()
-            raise
-        finally:
-            browser.close()
-            print("\n v Navegador cerrado")
+                print("\n--- CONSUMOS ---")
+                consumos_raw = extraer_consumos(page, chunk_desde, chunk_hasta)
+                df_consumos = procesar_consumos(consumos_raw)
 
-    # 5. Guardar en Supabase
-    print("\n" + "=" * 70)
-    print("FASE 5: GUARDAR EN SUPABASE")
-    print("=" * 70)
+            except Exception as e:
+                import traceback
+                print(f"\nERROR en bloque {chunk_idx}: {e}")
+                traceback.print_exc()
+                print("Continuando con el siguiente bloque...")
+                browser.close()
+                continue
+            finally:
+                browser.close()
+                print("\n v Navegador cerrado")
 
-    print("\n[Tickets]")
-    insert_tickets(supabase, df_tickets)
-
-    print("\n[Consumos]")
-    upsert_consumos(supabase, df_consumos)
+        print("\n--- GUARDANDO EN SUPABASE ---")
+        if not df_tickets.empty:
+            insert_tickets(supabase, df_tickets)
+        if not df_consumos.empty:
+            upsert_consumos(supabase, df_consumos)
 
     print("\n" + "=" * 70)
     print("PROCESO COMPLETO FINALIZADO")
