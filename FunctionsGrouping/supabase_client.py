@@ -97,7 +97,7 @@ def insert_tickets(client: Client, df: pd.DataFrame):
     inserted = 0
     for i in range(0, len(records), batch_size):
         batch = records[i:i + batch_size]
-        client.table('tickets_detalle').insert(batch).execute()
+        client.table('tickets_detalle').upsert(batch, on_conflict='numero,codigo').execute()
         inserted += len(batch)
         print(f"   ✓ Insertados {inserted}/{len(records)}")
 
