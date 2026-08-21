@@ -3,10 +3,14 @@ DATAKINGA - Extraccion con Playwright (headless Chromium)
 Reemplaza Selenium+Edge para funcionar en Render (Linux, sin GUI)
 """
 import io
+import os
 import time
 import pandas as pd
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 from playwright.sync_api import Page, Download
+
+load_dotenv()
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +32,22 @@ def _set_date_field(page: Page, field_id: str, fecha_sin_barras: str):
     time.sleep(0.3)
 
 
-# ---------------------------------------------------------------------------
+
+def _get_allowed_sucursales():
+    raw = os.getenv('SUCURSALES', '').strip()
+    if not raw:
+        return None
+    return [s.strip() for s in raw.split(',') if s.strip()]
+
+
+def _sucursal_permitida(nombre, allowed):
+    if allowed is None:
+        return True
+    norm = nombre.upper().replace(' ', '').replace('_', '')
+    return any(norm == a.upper().replace(' ', '').replace('_', '') for a in allowed)
+
+
+
 # Login
 # ---------------------------------------------------------------------------
 
@@ -136,6 +155,8 @@ def extraer_tickets_detalle(page: Page, fecha_desde: datetime, fecha_hasta: date
         "#ctl00_ContentPlaceHolder1_cmbSucursal option",
         "options => options.map(o => ({value: o.value, text: o.text.trim()}))"
     )
+    allowed = _get_allowed_sucursales()
+    opciones = [op for op in opciones if _sucursal_permitida(op['text'], allowed)]
     print(f"   Sucursales encontradas: {len(opciones)}")
     for i, op in enumerate(opciones):
         print(f"   [{i}] {op['text']}")
@@ -210,8 +231,10 @@ def extraer_consumos(page: Page, fecha_desde: datetime, fecha_hasta: datetime) -
     ]
 
     resultados = []
+    allowed = _get_allowed_sucursales()
+    to_process = [(i, s) for i, s in enumerate(sucursales) if _sucursal_permitida(s, allowed)]
 
-    for i, nombre_sucursal in enumerate(sucursales):
+    for i, nombre_sucursal in to_process:
         print(f"\n   --- {i+1}/{len(sucursales)}: {nombre_sucursal} ---")
 
         for intento in range(1, 4):
