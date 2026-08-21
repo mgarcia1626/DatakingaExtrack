@@ -69,8 +69,8 @@ def _nav_to(page: Page, link_text: str):
     page.goto('https://datakinga.com/', timeout=60000, wait_until='domcontentloaded')
     page.wait_for_load_state('domcontentloaded', timeout=60000)
     page.wait_for_selector(f'text={link_text}', timeout=30000)
-    page.click(f'text={link_text}')
-    page.wait_for_load_state('domcontentloaded', timeout=60000)
+    page.click(f'text={link_text}', no_wait_after=True)
+    page.wait_for_load_state('domcontentloaded', timeout=90000)
     time.sleep(2)
 
 
