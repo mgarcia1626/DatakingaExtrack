@@ -90,6 +90,10 @@ def insert_tickets(client: Client, df: pd.DataFrame):
         if col in df_new.columns:
             df_new[col] = df_new[col].astype(str)
 
+    # Drop duplicates within the batch (same numero+codigo) to avoid ON CONFLICT update conflict
+    df_new = df_new.drop_duplicates(subset=['numero', 'codigo'], keep='last')
+    # Drop duplicates within the batch (same numero+codigo) to avoid ON CONFLICT update conflict
+    df_new = df_new.drop_duplicates(subset=['numero', 'codigo'], keep='last')
     records = df_new.where(pd.notnull(df_new), None).to_dict(orient='records')
 
     # Insert in batches of 500
