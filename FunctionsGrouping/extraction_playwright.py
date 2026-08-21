@@ -48,6 +48,42 @@ def _sucursal_permitida(nombre, allowed):
 
 
 
+def _nav_to(page: Page, link_text: str):
+    page.goto('https://datakinga.com/', timeout=30000)
+    page.wait_for_load_state('networkidle', timeout=20000)
+    page.wait_for_selector(f'text={link_text}', timeout=20000)
+    page.click(f'text={link_text}')
+    page.wait_for_load_state('networkidle', timeout=20000)
+    time.sleep(2)
+
+
+def _nav_to(page: Page, link_text: str):
+    page.goto('https://datakinga.com/', timeout=30000)
+    page.wait_for_load_state('networkidle', timeout=20000)
+    page.wait_for_selector(f'text={link_text}', timeout=20000)
+    page.click(f'text={link_text}')
+    page.wait_for_load_state('networkidle', timeout=20000)
+    time.sleep(2)
+
+
+def _nav_to(page: Page, link_text: str):
+    page.goto('https://datakinga.com/', timeout=30000)
+    page.wait_for_load_state('networkidle', timeout=20000)
+    page.wait_for_selector(f'text={link_text}', timeout=20000)
+    page.click(f'text={link_text}')
+    page.wait_for_load_state('networkidle', timeout=20000)
+    time.sleep(2)
+
+
+def _nav_to(page: Page, link_text: str):
+    page.goto('https://datakinga.com/', timeout=30000)
+    page.wait_for_load_state('networkidle', timeout=20000)
+    page.wait_for_selector(f'text={link_text}', timeout=20000)
+    page.click(f'text={link_text}')
+    page.wait_for_load_state('networkidle', timeout=20000)
+    time.sleep(2)
+
+
 # Login
 # ---------------------------------------------------------------------------
 
@@ -139,9 +175,7 @@ def extraer_tickets_detalle(page: Page, fecha_desde: datetime, fecha_hasta: date
 
     # Navegar
     print("[1/3] Navegando a Ticket con Detalle...")
-    page.click("text=Ticket con Detalle")
-    page.wait_for_load_state("networkidle", timeout=15000)
-    time.sleep(2)
+    _nav_to(page, "Ticket con Detalle")
 
     # Fechas
     print("[2/3] Configurando fechas...")
@@ -188,9 +222,7 @@ def extraer_tickets_detalle(page: Page, fecha_desde: datetime, fecha_hasta: date
                 print(f"   ! Intento {intento}/3 fallido: {e}")
                 if intento < 3:
                     # Volver a configurar la pagina
-                    page.click("text=Ticket con Detalle")
-                    page.wait_for_load_state("networkidle", timeout=15000)
-                    time.sleep(2)
+                    _nav_to(page, "Ticket con Detalle")
                     _set_date_field(page, "ctl00_ContentPlaceHolder1_txtDesde", fecha_desde_sin)
                     _set_date_field(page, "ctl00_ContentPlaceHolder1_txtHasta", fecha_hasta_sin)
                     time.sleep(1)
