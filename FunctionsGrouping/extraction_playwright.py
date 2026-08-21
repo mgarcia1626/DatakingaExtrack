@@ -59,7 +59,7 @@ def _nav_to(page: Page, link_text: str):
 def _nav_to(page: Page, link_text: str):
     page.goto('https://datakinga.com/', timeout=30000)
     page.wait_for_load_state('domcontentloaded', timeout=60000)
-    page.wait_for_selector(f'text={link_text}', timeout=20000)
+    page.wait_for_selector(f'text={link_text}', timeout=30000)
     page.click(f'text={link_text}')
     page.wait_for_load_state('domcontentloaded', timeout=60000)
     time.sleep(2)
@@ -113,6 +113,7 @@ def extraer_cinta_testigo(page: Page, fecha_desde: datetime, fecha_hasta: dateti
 
 
 
+    page.wait_for_selector("#ctl00_ContentPlaceHolder1_txtDesde", timeout=60000)
     # Fechas
     print("[2/4] Configurando fechas...")
     _set_date_field(page, "ctl00_ContentPlaceHolder1_txtDesde", fecha_desde_sin)
@@ -174,7 +175,7 @@ def extraer_tickets_detalle(page: Page, fecha_desde: datetime, fecha_hasta: date
 
     # Leer sucursales del dropdown
     print("[3/3] Procesando sucursales...")
-    page.wait_for_selector("#ctl00_ContentPlaceHolder1_cmbSucursal", timeout=10000)
+    page.wait_for_selector("#ctl00_ContentPlaceHolder1_cmbSucursal", timeout=60000)
     opciones = page.eval_on_selector_all(
         "#ctl00_ContentPlaceHolder1_cmbSucursal option",
         "options => options.map(o => ({value: o.value, text: o.text.trim()}))"
