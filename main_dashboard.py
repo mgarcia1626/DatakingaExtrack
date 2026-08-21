@@ -82,7 +82,8 @@ if 'Fecha' in df_tickets_filtrado.columns:
             "Desde",
             value=fecha_min,
             min_value=fecha_min,
-            max_value=fecha_max
+            max_value=fecha_max,
+            key="fecha_desde_1"
         )
     
     with col2:
@@ -90,7 +91,8 @@ if 'Fecha' in df_tickets_filtrado.columns:
             "Hasta",
             value=fecha_max,
             min_value=fecha_min,
-            max_value=fecha_max
+            max_value=fecha_max,
+            key="fecha_hasta_1"
         )
     
     # Aplicar filtro de fechas
@@ -299,7 +301,8 @@ if 'Fecha' in df_tickets_filtrado.columns:
             "Desde",
             value=fecha_min,
             min_value=fecha_min,
-            max_value=fecha_max
+            max_value=fecha_max,
+            key="fecha_desde_2"
         )
     
     with col2:
@@ -307,7 +310,8 @@ if 'Fecha' in df_tickets_filtrado.columns:
             "Hasta",
             value=fecha_max,
             min_value=fecha_min,
-            max_value=fecha_max
+            max_value=fecha_max,
+            key="fecha_hasta_2"
         )
     
     # Aplicar filtro de fechas
@@ -384,7 +388,8 @@ menu_opcion_temp = st.sidebar.radio(
     "Selecciona una vista",
     opciones_menu,
     index=index_actual,
-    label_visibility="collapsed"
+    label_visibility="collapsed",
+    key="menu_principal_2"
 )
 
 # Si se selecciona un separador, mantener la última selección válida
@@ -676,7 +681,8 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                 producto_seleccionado = st.selectbox(
                     "Selecciona un producto",
                     productos_disponibles,
-                    index=0
+                    index=0,
+                    key="producto_combo_sel"
                 )
             
             with col2:
@@ -805,7 +811,8 @@ elif menu_opcion == "Productos mas vendidos":
     cantidad_productos = st.selectbox(
         "Cantidad de productos a mostrar",
         options=[5, 10, 15, 20, 25, 30],
-        index=3  # Por defecto 20
+        index=3,  # Por defecto 20
+        key="cant_prod_1"
     )
     
     if 'Descripción' in df_tickets_filtrado.columns:
@@ -845,7 +852,8 @@ elif menu_opcion == "Productos menos vendidos":
     cantidad_productos = st.selectbox(
         "Cantidad de productos a mostrar",
         options=[5, 10, 15, 20, 25, 30],
-        index=3  # Por defecto 20
+        index=3,  # Por defecto 20
+        key="cant_prod_2"
     )
     
     if 'Descripción' in df_tickets_filtrado.columns:
@@ -885,7 +893,8 @@ elif menu_opcion == "Productos mejor facturacion":
     cantidad_productos = st.selectbox(
         "Cantidad de productos a mostrar",
         options=[5, 10, 15, 20, 25, 30],
-        index=3  # Por defecto 20
+        index=3,  # Por defecto 20
+        key="cant_prod_3"
     )
     
     if 'Descripción' in df_tickets_filtrado.columns:
@@ -933,7 +942,8 @@ elif menu_opcion == "Productos peor facturacion":
     cantidad_productos = st.selectbox(
         "Cantidad de productos a mostrar",
         options=[5, 10, 15, 20, 25, 30],
-        index=3  # Por defecto 20
+        index=3,  # Por defecto 20
+        key="cant_prod_4"
     )
     
     if 'Descripción' in df_tickets_filtrado.columns:
@@ -1314,7 +1324,8 @@ elif menu_opcion == "Análisis por Familia":
         if len(familias_disponibles) > 0:
             familia_seleccionada = st.selectbox(
                 "Selecciona una familia para análisis detallado",
-                familias_disponibles
+                familias_disponibles,
+                key="familia_sel"
             )
         else:
             st.warning("⚠️ No hay familias disponibles para esta sucursal")
