@@ -56,7 +56,8 @@ if 'Sucursal' in df_tickets.columns:
         sucursal_seleccionada = st.sidebar.selectbox(
             "Sucursal",
             sucursales,
-            index=0
+            index=0,
+            key="sb_sucursal_1"
         )
         df_tickets_filtrado = df_tickets[df_tickets['Sucursal'] == sucursal_seleccionada]
     else:
@@ -110,7 +111,8 @@ if 'Turno' in df_tickets_filtrado.columns:
         turno_seleccionado = st.sidebar.selectbox(
             "Turno",
             opciones_turno,
-            index=0  # Por defecto "Todos"
+            index=0,  # Por defecto "Todos"
+            key="sb_turno_1"
         )
         
         # Aplicar filtro de turnos solo si no es "Todos"
@@ -271,7 +273,8 @@ if 'Sucursal' in df_tickets.columns:
         sucursal_seleccionada = st.sidebar.selectbox(
             "Sucursal",
             sucursales,
-            index=0
+            index=0,
+            key="sb_sucursal_2"
         )
         df_tickets_filtrado = df_tickets[df_tickets['Sucursal'] == sucursal_seleccionada]
     else:
@@ -325,7 +328,8 @@ if 'Turno' in df_tickets_filtrado.columns:
         turno_seleccionado = st.sidebar.selectbox(
             "Turno",
             opciones_turno,
-            index=0  # Por defecto "Todos"
+            index=0,  # Por defecto "Todos"
+            key="sb_turno_2"
         )
         
         # Aplicar filtro de turnos solo si no es "Todos"
