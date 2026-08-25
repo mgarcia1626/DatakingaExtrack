@@ -118,6 +118,7 @@ def upsert_consumos(client: Client, df: pd.DataFrame):
         if col in df.columns:
             df[col] = df[col].astype(str)
 
+    df = df.drop_duplicates(subset=['codigo', 'articulo', 'sucursal'], keep='last')
     records = df.where(pd.notnull(df), None).to_dict(orient='records')
 
     batch_size = 500

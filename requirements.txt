@@ -1,12 +1,11 @@
-﻿# Browser automation
-selenium
-webdriver-manager
-playwright==1.44.0
-
-# Data processing
+﻿# Data processing
 pandas
 openpyxl
 xlrd
+
+# HTTP & scraping (new site)
+requests
+beautifulsoup4
 
 # Environment & config
 python-dotenv
