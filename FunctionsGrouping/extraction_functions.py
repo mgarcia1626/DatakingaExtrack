@@ -1,4 +1,4 @@
-"""
+﻿"""
 Funciones de extracción de datos desde Datakinga
 """
 from selenium.webdriver.common.by import By
@@ -50,7 +50,7 @@ def extraer_cinta_testigo(driver, wait, download_dir, fecha_desde=None, fecha_ha
     
     # Configurar fechas
     print("\n[2/4] CONFIGURANDO FECHAS")
-    fecha_desde_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
+    fecha_desde_field = wait.until(EC.presence_of_element_located((By.ID, "ctl00_ContentPlaceHolder1_txtDesde")))
     fecha_desde_field.click()
     time.sleep(0.2)
     fecha_desde_field.send_keys('\ue009a\ue000')  # Ctrl+A
@@ -92,7 +92,7 @@ def extraer_cinta_testigo(driver, wait, download_dir, fecha_desde=None, fecha_ha
             print(f"\n   🔄 Reintento {intento}/{max_intentos}")
         
         # Click en Exportar a Excel
-        exportar_btn = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_cmdExportar")
+        exportar_btn = wait.until(EC.element_to_be_clickable((By.ID, "ctl00_ContentPlaceHolder1_cmdExportar")))
         exportar_btn.click()
         print(f"   ✓ Exportar a Excel clickeado")
         
@@ -189,7 +189,7 @@ def extraer_tickets_detalle(driver, wait, download_dir, fecha_desde=None, fecha_
     
     # Configurar fechas
     print("\n[2/4] CONFIGURANDO FECHAS")
-    fecha_desde_field = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_txtDesde")
+    fecha_desde_field = wait.until(EC.presence_of_element_located((By.ID, "ctl00_ContentPlaceHolder1_txtDesde")))
     fecha_desde_field.click()
     time.sleep(0.2)
     fecha_desde_field.send_keys('\ue009a\ue000')  # Ctrl+A
@@ -222,7 +222,12 @@ def extraer_tickets_detalle(driver, wait, download_dir, fecha_desde=None, fecha_
     archivos_guardados = []
     downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
     
+    _allowed = [s.strip().upper().replace(' ', '_') for s in os.environ.get('SUCURSALES', '').split(',') if s.strip()]
+
     for i, option in enumerate(options):
+        if _allowed and option.text.strip().upper().replace(' ', '_') not in _allowed:
+            print(f"\n   Saltando {option.text} (no en SUCURSALES)")
+            continue
         print(f"\n   --- Procesando {i+1}/{len(options)}: {option.text} ---")
         
         max_intentos = 3
@@ -459,7 +464,7 @@ def extraer_consumos(driver, wait, download_dir, fecha_desde=None, fecha_hasta=N
             time.sleep(3)
             
             # Exportar
-            exportar_btn = driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_cmdExportar")
+            exportar_btn = wait.until(EC.element_to_be_clickable((By.ID, "ctl00_ContentPlaceHolder1_cmdExportar")))
             exportar_btn.click()
             print(f"   ✓ Exportar clickeado")
             

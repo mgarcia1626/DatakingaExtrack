@@ -134,10 +134,26 @@ def upsert_consumos(client: Client, df: pd.DataFrame):
     print(f"   ✅ {upserted} consumos procesados en Supabase")
 
 
+def _fetch_all_rows(client: Client, table: str, select: str = '*') -> list:
+    """Fetch all rows from a Supabase table using pagination to bypass the 1000-row default limit."""
+    all_data = []
+    page_size = 1000
+    offset = 0
+    while True:
+        response = client.table(table).select(select).range(offset, offset + page_size - 1).execute()
+        if not response.data:
+            break
+        all_data.extend(response.data)
+        if len(response.data) < page_size:
+            break
+        offset += page_size
+    return all_data
+
+
 def fetch_tickets(client: Client) -> pd.DataFrame:
     """Fetch all tickets from Supabase and rename columns to original names."""
-    response = client.table('tickets_detalle').select('*').execute()
-    df = pd.DataFrame(response.data)
+    data = _fetch_all_rows(client, 'tickets_detalle')
+    df = pd.DataFrame(data)
     if df.empty:
         return df
     return df.rename(columns={
@@ -159,8 +175,8 @@ def fetch_tickets(client: Client) -> pd.DataFrame:
 
 def fetch_consumos(client: Client) -> pd.DataFrame:
     """Fetch consumos from Supabase (latest fecha_carga per codigo+sucursal)."""
-    response = client.table('consumos').select('*').execute()
-    df = pd.DataFrame(response.data)
+    data = _fetch_all_rows(client, 'consumos')
+    df = pd.DataFrame(data)
     if df.empty:
         return df
     df = df.rename(columns={

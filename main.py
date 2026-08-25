@@ -118,8 +118,10 @@ except Exception as e:
     print(f"\n❌ ERROR: {e}")
     import traceback
     traceback.print_exc()
-    print("\n⏳ Presiona ENTER para cerrar...")
-    input()
+    if sys.stdin.isatty():
+        print("\n⏳ Presiona ENTER para cerrar...")
+        input()
+        input()
 
 
 finally:
