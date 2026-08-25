@@ -1,6 +1,6 @@
 """
 DATAKINGA - Dashboard Interactivo
-VisualizaciÃ³n de datos con Streamlit
+Visualización de datos con Streamlit
 """
 import streamlit as st
 import pandas as pd
@@ -14,16 +14,16 @@ from FunctionsGrouping.supabase_client import get_client, fetch_tickets, fetch_c
 # Cargar variables de entorno
 load_dotenv()
 
-# ConfiguraciÃ³n de la pÃ¡gina
+# Configuración de la página
 st.set_page_config(
     page_title="DataKinga Dashboard",
-    page_icon="ðŸ“Š",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# TÃ­tulo principal
-st.title("ðŸ“Š DataKinga Dashboard")
+# Título principal
+st.title("📊 DataKinga Dashboard")
 st.markdown("---")
 
 # Cargar datos
@@ -59,11 +59,10 @@ def cargar_datos():
         if 'Sucursal' in df_consumos.columns:
             df_consumos['Sucursal'] = df_consumos['Sucursal'].apply(_normalizar_sucursal)
         # Normalize accented column names to plain ASCII
-        df_tickets = df_tickets.rename(columns={
-            'Número': 'Numero',
-            'Código': 'Codigo',
-            'Descripción': 'Descripcion',
-        })
+        import unicodedata as _ud
+        _col_map = {c: ''.join(x for x in _ud.normalize('NFD', c) if _ud.category(x) != 'Mn') for c in df_tickets.columns if any(ord(x) > 127 for x in c)}
+        if _col_map:
+            df_tickets = df_tickets.rename(columns=_col_map)
         return df_tickets, df_consumos
     except Exception as e:
         st.error(f'Error al cargar datos desde Supabase: {str(e)}')
@@ -74,7 +73,7 @@ def cargar_datos():
 df_tickets, df_consumos = cargar_datos()
 
 # Sidebar - Filtros globales
-st.sidebar.header("ðŸ” Filtros")
+st.sidebar.header("🔍 Filtros")
 
 # Filtro por sucursal (OBLIGATORIO - solo una)
 if 'Sucursal' in df_tickets.columns:
@@ -88,10 +87,10 @@ if 'Sucursal' in df_tickets.columns:
         )
         df_tickets_filtrado = df_tickets[df_tickets['Sucursal'] == sucursal_seleccionada]
     else:
-        st.sidebar.error("âš ï¸ No hay sucursales disponibles")
+        st.sidebar.error("⚠️ No hay sucursales disponibles")
         df_tickets_filtrado = df_tickets
 else:
-    st.sidebar.error("âš ï¸ No hay columna Sucursal")
+    st.sidebar.error("⚠️ No hay columna Sucursal")
     df_tickets_filtrado = df_tickets
 
 # Filtro por rango de fechas
@@ -128,13 +127,13 @@ if 'Fecha' in df_tickets_filtrado.columns:
         (df_tickets_filtrado['Fecha_dt'].dt.date <= fecha_hasta)
     ]
 else:
-    st.sidebar.warning("âš ï¸ No hay columna Fecha")
+    st.sidebar.warning("⚠️ No hay columna Fecha")
 
-# Filtro por turno (desplegable con opciÃ³n Todos)
+# Filtro por turno (desplegable con opción Todos)
 if 'Turno' in df_tickets_filtrado.columns:
     turnos_disponibles = sorted(df_tickets_filtrado['Turno'].dropna().unique().tolist())
     if len(turnos_disponibles) > 0:
-        # Agregar opciÃ³n "Todos" al inicio
+        # Agregar opción "Todos" al inicio
         opciones_turno = ["Todos"] + turnos_disponibles
         
         turno_seleccionado = st.sidebar.selectbox(
@@ -148,45 +147,45 @@ if 'Turno' in df_tickets_filtrado.columns:
         if turno_seleccionado != "Todos":
             df_tickets_filtrado = df_tickets_filtrado[df_tickets_filtrado['Turno'] == turno_seleccionado]
 
-# Ãšltima actualizaciÃ³n (pequeÃ±o, debajo del filtro de turno)
+# Última actualización (pequeño, debajo del filtro de turno)
 st.sidebar.markdown("---")
 last_run_time = os.getenv('LAST_RUN_TIME', '')
 last_run_status = os.getenv('LAST_RUN_STATUS', '')
 
 if last_run_time:
-    status_icon = "âœ…" if last_run_status == "SUCCESS" else "âŒ"
-    st.sidebar.caption(f"ðŸ• Ãšltima actualizaciÃ³n: {last_run_time} {status_icon}")
+    status_icon = "✅" if last_run_status == "SUCCESS" else "❌"
+    st.sidebar.caption(f"🕐 Última actualización: {last_run_time} {status_icon}")
 
-# MenÃº de navegaciÃ³n
+# Menú de navegación
 st.sidebar.markdown("---")
-st.sidebar.header("ðŸ“‹ MenÃº")
+st.sidebar.header("📋 Menú")
 
 # UN SOLO radio button con todas las opciones y separadores
 opciones_menu = [
-    "FacturaciÃ³n",
-    "AnÃ¡lisis por Familia",
-    "â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
+    "Facturación",
+    "Análisis por Familia",
+    "─────────────",
     "Buscador de Productos en Tickets",
-    "â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
+    "─────────────",
     "Ranking de productos",
     "Productos mas vendidos", 
     "Productos menos vendidos", 
     "Productos mejor facturacion", 
     "Productos peor facturacion",
-    "â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
+    "─────────────",
     "Relaciones por producto", 
     "Relaciones por familia",
-    "â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
-    "CreaciÃ³n de Combos",
-    "â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
-    "AnÃ¡lisis de regalos"
+    "─────────────",
+    "Creación de Combos",
+    "─────────────",
+    "Análisis de regalos"
 ]
 
 # Inicializar session_state si no existe
 if 'menu_seleccion' not in st.session_state:
-    st.session_state.menu_seleccion = "FacturaciÃ³n"
+    st.session_state.menu_seleccion = "Facturación"
 
-# Encontrar el Ã­ndice de la selecciÃ³n actual
+# Encontrar el índice de la selección actual
 try:
     index_actual = opciones_menu.index(st.session_state.menu_seleccion)
 except ValueError:
@@ -200,53 +199,53 @@ menu_opcion_temp = st.sidebar.radio(
     key="menu_principal_2"
 )
 
-# Si se selecciona un separador, mantener la Ãºltima selecciÃ³n vÃ¡lida
-if menu_opcion_temp.startswith("â”€"):
+# Si se selecciona un separador, mantener la última selección válida
+if menu_opcion_temp.startswith("─"):
     menu_opcion = st.session_state.menu_seleccion
 else:
     menu_opcion = menu_opcion_temp
     st.session_state.menu_seleccion = menu_opcion
 
-# ========== VISTA: FACTURACIÃ“N ==========
-if menu_opcion == "FacturaciÃ³n":
-    st.header("ðŸ’° FacturaciÃ³n")
+# ========== VISTA: FACTURACIÓN ==========
+if menu_opcion == "Facturación":
+    st.header("💰 Facturación")
     
-    # Calcular mÃ©tricas del periodo
+    # Calcular métricas del periodo
     if 'Importe' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns:
-        # FacturaciÃ³n total del periodo
+        # Facturación total del periodo
         df_temp_metricas = df_tickets_filtrado.copy()
         df_temp_metricas['Importe_Total'] = df_temp_metricas['Cantidad'] * df_temp_metricas['Importe']
         facturacion_total_periodo = df_temp_metricas['Importe_Total'].sum()
         
-        # Cantidad de dÃ­as facturados (dÃ­as con al menos una venta)
+        # Cantidad de días facturados (días con al menos una venta)
         if 'Fecha' in df_tickets_filtrado.columns:
             dias_facturados = df_tickets_filtrado['Fecha'].nunique()
         else:
             dias_facturados = 0
         
-        # Mostrar mÃ©tricas
+        # Mostrar métricas
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("FacturaciÃ³n Total del Periodo", f"${facturacion_total_periodo:,.2f}")
+            st.metric("Facturación Total del Periodo", f"${facturacion_total_periodo:,.2f}")
         with col2:
-            st.metric("Cantidad de DÃ­as Facturados", f"{dias_facturados}")
+            st.metric("Cantidad de Días Facturados", f"{dias_facturados}")
         
         st.markdown("---")
     
-    # GrÃ¡fico de barras: FacturaciÃ³n por dÃ­a
-    st.subheader("ðŸ“Š FacturaciÃ³n Diaria")
+    # Gráfico de barras: Facturación por día
+    st.subheader("📊 Facturación Diaria")
     if 'Fecha' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
         if 'Turno' in df_tickets_filtrado.columns:
             # Calcular importe total (Cantidad * Importe unitario)
             df_temp = df_tickets_filtrado.copy()
             df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
-            # FacturaciÃ³n por dÃ­a y turno (barras apiladas)
+            # Facturación por día y turno (barras apiladas)
             facturacion_diaria_turno = df_temp.groupby(['Fecha', 'Turno'])['Importe_Total'].sum().reset_index()
             facturacion_diaria_turno = facturacion_diaria_turno.rename(columns={'Importe_Total': 'Importe'})
             facturacion_diaria_turno['Fecha'] = pd.to_datetime(facturacion_diaria_turno['Fecha'])
             facturacion_diaria_turno = facturacion_diaria_turno.sort_values('Fecha')
             
-            # Crear rango completo de fechas (incluyendo dÃ­as faltantes)
+            # Crear rango completo de fechas (incluyendo días faltantes)
             fecha_min = facturacion_diaria_turno['Fecha'].min()
             fecha_max = facturacion_diaria_turno['Fecha'].max()
             todas_fechas = pd.date_range(start=fecha_min, end=fecha_max, freq='D')
@@ -264,16 +263,16 @@ if menu_opcion == "FacturaciÃ³n":
             )
             facturacion_diaria_turno['Importe'] = facturacion_diaria_turno['Importe'].fillna(0)
             
-            # Crear etiquetas de fecha con dÃ­a de la semana en espaÃ±ol
+            # Crear etiquetas de fecha con día de la semana en español
             dias_semana = {
-                'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'MiÃ©rcoles',
-                'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'SÃ¡bado', 'Sunday': 'Domingo'
+                'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
+                'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
             }
             facturacion_diaria_turno['Fecha_Label'] = facturacion_diaria_turno['Fecha'].apply(
                 lambda x: f"{dias_semana[x.strftime('%A')]}<br>{x.day}/{x.month}"
             )
             
-            # FunciÃ³n para formatear valores con k y M
+            # Función para formatear valores con k y M
             def format_value(val):
                 if val == 0:
                     return ""
@@ -300,14 +299,14 @@ if menu_opcion == "FacturaciÃ³n":
                 x='Fecha_Label',
                 y='Importe',
                 color='Turno',
-                title='FacturaciÃ³n Total por DÃ­a (por Turno)',
-                labels={'Importe': 'FacturaciÃ³n ($)', 'Fecha_Label': 'DÃ­a y Fecha', 'Turno': 'Turno'},
+                title='Facturación Total por Día (por Turno)',
+                labels={'Importe': 'Facturación ($)', 'Fecha_Label': 'Día y Fecha', 'Turno': 'Turno'},
                 barmode='stack',
                 color_discrete_map=color_map,
                 text='Texto'
             )
             
-            # Configurar el texto dentro de las barras (horizontal, nÃºmeros oscuros)
+            # Configurar el texto dentro de las barras (horizontal, números oscuros)
             fig_barras.update_traces(
                 textposition='inside',
                 textangle=0,
@@ -317,13 +316,13 @@ if menu_opcion == "FacturaciÃ³n":
             # Calcular importe total (Cantidad * Importe unitario)
             df_temp = df_tickets_filtrado.copy()
             df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
-            # FacturaciÃ³n sin turno
+            # Facturación sin turno
             facturacion_diaria = df_temp.groupby('Fecha')['Importe_Total'].sum().reset_index()
             facturacion_diaria = facturacion_diaria.rename(columns={'Importe_Total': 'Importe'})
             facturacion_diaria['Fecha'] = pd.to_datetime(facturacion_diaria['Fecha'])
             facturacion_diaria = facturacion_diaria.sort_values('Fecha')
             
-            # Crear rango completo de fechas (incluyendo dÃ­as faltantes)
+            # Crear rango completo de fechas (incluyendo días faltantes)
             fecha_min = facturacion_diaria['Fecha'].min()
             fecha_max = facturacion_diaria['Fecha'].max()
             todas_fechas = pd.date_range(start=fecha_min, end=fecha_max, freq='D')
@@ -333,16 +332,16 @@ if menu_opcion == "FacturaciÃ³n":
             facturacion_diaria = facturacion_diaria.rename(columns={'index': 'Fecha'})
             facturacion_diaria['Importe'] = facturacion_diaria['Importe'].fillna(0)
             
-            # Crear etiquetas de fecha con dÃ­a de la semana en espaÃ±ol
+            # Crear etiquetas de fecha con día de la semana en español
             dias_semana = {
-                'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'MiÃ©rcoles',
-                'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'SÃ¡bado', 'Sunday': 'Domingo'
+                'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
+                'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
             }
             facturacion_diaria['Fecha_Label'] = facturacion_diaria['Fecha'].apply(
                 lambda x: f"{dias_semana[x.strftime('%A')]}<br>{x.day}/{x.month}"
             )
             
-            # FunciÃ³n para formatear valores con k y M
+            # Función para formatear valores con k y M
             def format_value(val):
                 if val == 0:
                     return ""
@@ -360,8 +359,8 @@ if menu_opcion == "FacturaciÃ³n":
                 facturacion_diaria,
                 x='Fecha_Label',
                 y='Importe',
-                title='FacturaciÃ³n Total por DÃ­a',
-                labels={'Importe': 'FacturaciÃ³n ($)', 'Fecha_Label': 'DÃ­a y Fecha'},
+                title='Facturación Total por Día',
+                labels={'Importe': 'Facturación ($)', 'Fecha_Label': 'Día y Fecha'},
                 text='Texto'
             )
             
@@ -375,16 +374,16 @@ if menu_opcion == "FacturaciÃ³n":
         
         fig_barras.update_layout(
             showlegend=True,
-            xaxis_title='DÃ­a y Fecha'
+            xaxis_title='Día y Fecha'
         )
         st.plotly_chart(fig_barras, use_container_width=True)
     else:
-        st.warning("âš ï¸ No hay datos de facturaciÃ³n disponibles")
+        st.warning("⚠️ No hay datos de facturación disponibles")
     
     st.markdown("---")
     
-    # GrÃ¡fico de torta: % de facturaciÃ³n por familia
-    st.subheader("ðŸ¥§ FacturaciÃ³n por Familia")
+    # Gráfico de torta: % de facturación por familia
+    st.subheader("🥧 Facturación por Familia")
     if 'Codigo' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
         # Convertir columnas a string para el merge
         df_tickets_temp = df_tickets_filtrado.copy()
@@ -431,14 +430,14 @@ if menu_opcion == "FacturaciÃ³n":
             facturacion_familia,
             values='Importe',
             names='Familia_Label',
-            title='DistribuciÃ³n de FacturaciÃ³n por Familia',
+            title='Distribución de Facturación por Familia',
             hole=0.4,
             custom_data=['Familia']
         )
         fig_torta.update_traces(
             textposition='inside',
             text=facturacion_familia['Familia'],
-            hovertemplate='<b>%{customdata[0]}</b><br>FacturaciÃ³n: $%{value:,.2f}<extra></extra>'
+            hovertemplate='<b>%{customdata[0]}</b><br>Facturación: $%{value:,.2f}<extra></extra>'
         )
         st.plotly_chart(fig_torta, use_container_width=True)
         
@@ -447,7 +446,7 @@ if menu_opcion == "FacturaciÃ³n":
         tabla_familia['Importe'] = tabla_familia['Importe'].apply(lambda x: f"${x:,.2f}")
         tabla_familia['Porcentaje'] = tabla_familia['Porcentaje'].apply(lambda x: f"{x:.2f}%")
         tabla_familia = tabla_familia.rename(
-            columns={'Importe': 'FacturaciÃ³n ($)', 'Porcentaje': '% del Total'}
+            columns={'Importe': 'Facturación ($)', 'Porcentaje': '% del Total'}
         )
         
         # Usar HTML para centrar el texto
@@ -466,22 +465,22 @@ if menu_opcion == "FacturaciÃ³n":
             hide_index=True
         )
     else:
-        st.warning("âš ï¸ No hay datos de cÃ³digo para vincular con familias")
+        st.warning("⚠️ No hay datos de código para vincular con familias")
 
 # ========== VISTA: BUSCADOR DE PRODUCTOS EN TICKETS ==========
 elif menu_opcion == "Buscador de Productos en Tickets":
-    st.header("ðŸ” Buscador de Productos en Tickets")
-    st.markdown("Busca un producto y visualiza todos los tickets donde aparece, junto con los demÃ¡s productos de cada ticket.")
+    st.header("🔍 Buscador de Productos en Tickets")
+    st.markdown("Busca un producto y visualiza todos los tickets donde aparece, junto con los demás productos de cada ticket.")
     
     # Verificar que tenemos las columnas necesarias
     if 'Descripcion' not in df_tickets_filtrado.columns or 'Numero' not in df_tickets_filtrado.columns:
-        st.error("âš ï¸ Faltan columnas necesarias (Descripcion o Numero) en los datos")
+        st.error("⚠️ Faltan columnas necesarias (Descripcion o Numero) en los datos")
     else:
         # Selector de producto
         productos_disponibles = sorted(df_tickets_filtrado['Descripcion'].dropna().unique().tolist())
         
         if len(productos_disponibles) == 0:
-            st.warning("âš ï¸ No hay productos disponibles en el periodo seleccionado")
+            st.warning("⚠️ No hay productos disponibles en el periodo seleccionado")
         else:
             col1, col2 = st.columns([3, 1])
             
@@ -504,20 +503,20 @@ elif menu_opcion == "Buscador de Productos en Tickets":
             ]['Numero'].unique()
             
             if len(tickets_con_producto) == 0:
-                st.info(f"â„¹ï¸ No se encontraron tickets con el producto '{producto_seleccionado}'")
+                st.info(f"ℹ️ No se encontraron tickets con el producto '{producto_seleccionado}'")
             else:
                 # Filtrar todos los datos de esos tickets
                 df_tickets_completos = df_tickets_filtrado[
                     df_tickets_filtrado['Numero'].isin(tickets_con_producto)
                 ].copy()
                 
-                # Calcular estadÃ­sticas
+                # Calcular estadísticas
                 total_tickets = len(tickets_con_producto)
                 total_items_producto = df_tickets_filtrado[
                     df_tickets_filtrado['Descripcion'] == producto_seleccionado
                 ]['Cantidad'].sum()
                 
-                # Calcular facturaciÃ³n del producto
+                # Calcular facturación del producto
                 if 'Importe' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns:
                     df_producto = df_tickets_filtrado[df_tickets_filtrado['Descripcion'] == producto_seleccionado].copy()
                     df_producto['Total'] = df_producto['Cantidad'] * df_producto['Importe']
@@ -525,7 +524,7 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                 else:
                     facturacion_producto = 0
                 
-                # Mostrar mÃ©tricas principales
+                # Mostrar métricas principales
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("Tickets encontrados", f"{total_tickets:,}")
@@ -533,7 +532,7 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                     st.metric("Cantidad vendida", f"{int(total_items_producto):,}")
                 with col3:
                     if facturacion_producto > 0:
-                        st.metric("FacturaciÃ³n total", f"${facturacion_producto:,.2f}")
+                        st.metric("Facturación total", f"${facturacion_producto:,.2f}")
                 
                 st.markdown("---")
                 
@@ -544,12 +543,12 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                     df_tickets_completos = df_tickets_completos.sort_values(['Fecha_dt', 'Hora_str'], ascending=[False, False])
                 
                 # Agrupar por ticket y mostrar
-                st.subheader("ðŸ“‹ Detalle de Tickets")
+                st.subheader("📋 Detalle de Tickets")
                 
                 for i, numero_ticket in enumerate(tickets_con_producto[:50]):  # Limitar a 50 tickets para rendimiento
                     df_ticket = df_tickets_completos[df_tickets_completos['Numero'] == numero_ticket].copy()
                     
-                    # InformaciÃ³n del ticket
+                    # Información del ticket
                     fecha = df_ticket['Fecha'].iloc[0] if 'Fecha' in df_ticket.columns else "N/A"
                     hora = df_ticket['Hora'].iloc[0] if 'Hora' in df_ticket.columns else "N/A"
                     turno = df_ticket['Turno'].iloc[0] if 'Turno' in df_ticket.columns else "N/A"
@@ -561,19 +560,19 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                     else:
                         total_ticket = 0
                     
-                    # Expandir con informaciÃ³n del ticket
+                    # Expandir con información del ticket
                     with st.expander(
-                        f"ðŸŽ« Ticket #{numero_ticket} - {fecha} {hora} - Total: ${total_ticket:,.2f}",
+                        f"🎫 Ticket #{numero_ticket} - {fecha} {hora} - Total: ${total_ticket:,.2f}",
                         expanded=(i < 3)  # Expandir los primeros 3
                     ):
-                        # InformaciÃ³n adicional
+                        # Información adicional
                         col1, col2, col3 = st.columns(3)
                         with col1:
-                            st.write(f"**ðŸ“… Fecha:** {fecha}")
+                            st.write(f"**📅 Fecha:** {fecha}")
                         with col2:
-                            st.write(f"**ðŸ• Hora:** {hora}")
+                            st.write(f"**🕐 Hora:** {hora}")
                         with col3:
-                            st.write(f"**â° Turno:** {turno}")
+                            st.write(f"**⏰ Turno:** {turno}")
                         
                         st.markdown("---")
                         st.write("**Productos en este ticket:**")
@@ -587,7 +586,7 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                         
                         df_display = df_ticket[columnas_mostrar].copy()
                         
-                        # Renombrar columnas para mejor presentaciÃ³n
+                        # Renombrar columnas para mejor presentación
                         if 'Total_Item' in df_display.columns:
                             df_display = df_display.rename(columns={'Total_Item': 'Total'})
                         
@@ -607,13 +606,13 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                         if total_ticket > 0:
                             st.markdown(f"**Total del ticket:** ${total_ticket:,.2f}")
                 
-                # Mostrar aviso si hay mÃ¡s tickets
+                # Mostrar aviso si hay más tickets
                 if len(tickets_con_producto) > 50:
-                    st.info(f"â„¹ï¸ Mostrando los primeros 50 tickets de {len(tickets_con_producto)} encontrados. Ajusta los filtros de fecha para ver menos resultados.")
+                    st.info(f"ℹ️ Mostrando los primeros 50 tickets de {len(tickets_con_producto)} encontrados. Ajusta los filtros de fecha para ver menos resultados.")
 
 # ========== VISTA: PRODUCTOS MAS VENDIDOS ==========
 elif menu_opcion == "Productos mas vendidos":
-    st.header("ðŸ“¦ Productos mas vendidos")
+    st.header("📦 Productos mas vendidos")
     
     # Selector de cantidad de productos
     cantidad_productos = st.selectbox(
@@ -637,7 +636,7 @@ elif menu_opcion == "Productos mas vendidos":
                     x='Cantidad',
                     y='Descripcion',
                     orientation='h',
-                    title=f'Top {cantidad_productos} Productos MÃ¡s Vendidos',
+                    title=f'Top {cantidad_productos} Productos Más Vendidos',
                     color='Cantidad',
                     color_continuous_scale='Viridis'
                 )
@@ -650,11 +649,11 @@ elif menu_opcion == "Productos mas vendidos":
                     hide_index=True
                 )
     else:
-        st.warning("âš ï¸ No hay columna Descripcion en los datos")
+        st.warning("⚠️ No hay columna Descripcion en los datos")
 
 # ========== VISTA: PRODUCTOS MENOS VENDIDOS ==========
 elif menu_opcion == "Productos menos vendidos":
-    st.header("ðŸ“‰ Productos menos vendidos")
+    st.header("📉 Productos menos vendidos")
     
     # Selector de cantidad de productos
     cantidad_productos = st.selectbox(
@@ -691,11 +690,11 @@ elif menu_opcion == "Productos menos vendidos":
                     hide_index=True
                 )
     else:
-        st.warning("âš ï¸ No hay columna Descripcion en los datos")
+        st.warning("⚠️ No hay columna Descripcion en los datos")
 
 # ========== VISTA: PRODUCTOS MEJOR FACTURACION ==========
 elif menu_opcion == "Productos mejor facturacion":
-    st.header("ðŸ’µ Productos mejor facturacion")
+    st.header("💵 Productos mejor facturacion")
     
     # Selector de cantidad de productos
     cantidad_productos = st.selectbox(
@@ -735,16 +734,16 @@ elif menu_opcion == "Productos mejor facturacion":
             
             with col2:
                 st.dataframe(
-                    top_facturacion.rename(columns={'Importe': 'FacturaciÃ³n Total ($)'}),
+                    top_facturacion.rename(columns={'Importe': 'Facturación Total ($)'}),
                     use_container_width=True,
                     hide_index=True
                 )
     else:
-        st.warning("âš ï¸ No hay columna Descripcion en los datos")
+        st.warning("⚠️ No hay columna Descripcion en los datos")
 
 # ========== VISTA: PRODUCTOS PEOR FACTURACION ==========
 elif menu_opcion == "Productos peor facturacion":
-    st.header("ðŸ’¸ Productos peor facturacion")
+    st.header("💸 Productos peor facturacion")
     
     # Selector de cantidad de productos
     cantidad_productos = st.selectbox(
@@ -776,7 +775,7 @@ elif menu_opcion == "Productos peor facturacion":
                     x='Importe',
                     y='Descripcion',
                     orientation='h',
-                    title=f'Top {cantidad_productos} Productos con Menor FacturaciÃ³n',
+                    title=f'Top {cantidad_productos} Productos con Menor Facturación',
                     color='Importe',
                     color_continuous_scale='Reds_r'
                 )
@@ -784,21 +783,21 @@ elif menu_opcion == "Productos peor facturacion":
             
             with col2:
                 st.dataframe(
-                    bottom_facturacion.rename(columns={'Importe': 'FacturaciÃ³n Total ($)'}),
+                    bottom_facturacion.rename(columns={'Importe': 'Facturación Total ($)'}),
                     use_container_width=True,
                     hide_index=True
                 )
     else:
-        st.warning("âš ï¸ No hay columna Descripcion en los datos")
+        st.warning("⚠️ No hay columna Descripcion en los datos")
 
 # ========== VISTA: RELACIONES POR PRODUCTO ==========
 elif menu_opcion == "Relaciones por producto":
-    st.header("ðŸŽ¯ Relaciones por producto")
+    st.header("🎯 Relaciones por producto")
     
     if 'Numero' in df_tickets_filtrado.columns and 'Descripcion' in df_tickets_filtrado.columns:
         
-        # AnÃ¡lisis por Producto
-        st.subheader("ðŸ” AnÃ¡lisis de Combos por Producto")
+        # Análisis por Producto
+        st.subheader("🔍 Análisis de Combos por Producto")
         
         # Selector de cantidad de combos para producto
         cantidad_combos_producto = st.selectbox(
@@ -810,7 +809,7 @@ elif menu_opcion == "Relaciones por producto":
         
         productos_disponibles = sorted(df_tickets_filtrado['Descripcion'].dropna().unique().tolist())
         producto_seleccionado = st.selectbox(
-            "Selecciona un producto para ver con quÃ© se vende",
+            "Selecciona un producto para ver con qué se vende",
             productos_disponibles,
             key="producto_combo"
         )
@@ -822,7 +821,7 @@ elif menu_opcion == "Relaciones por producto":
             key="omitir_familia"
         )
         
-        # Multiselect para omitir familias especÃ­ficas
+        # Multiselect para omitir familias específicas
         if 'Codigo' in df_tickets_filtrado.columns:
             df_tickets_temp = df_tickets_filtrado.copy()
             df_consumos_temp = df_consumos.copy()
@@ -854,7 +853,7 @@ elif menu_opcion == "Relaciones por producto":
                 df_tickets_filtrado['Descripcion'] == producto_seleccionado
             ]['Numero'].unique()
             
-            # Calcular cuÃ¡ntos tickets tienen SOLO este producto (solo en el ticket)
+            # Calcular cuántos tickets tienen SOLO este producto (solo en el ticket)
             tickets_solo = 0
             for ticket_num in tickets_con_producto:
                 productos_en_ticket = df_tickets_filtrado[
@@ -863,7 +862,7 @@ elif menu_opcion == "Relaciones por producto":
                 if productos_en_ticket == 1:
                     tickets_solo += 1
             
-            # Mostrar mÃ©trica de tickets solo
+            # Mostrar métrica de tickets solo
             col_metric1, col_metric2 = st.columns(2)
             with col_metric1:
                 st.metric("Total de tickets con este producto", len(tickets_con_producto))
@@ -878,7 +877,7 @@ elif menu_opcion == "Relaciones por producto":
                 (df_tickets_filtrado['Descripcion'] != producto_seleccionado)
             ].copy()
             
-            # Si el checkbox estÃ¡ marcado, filtrar por familia
+            # Si el checkbox está marcado, filtrar por familia
             if omitir_misma_familia and 'Codigo' in df_tickets_filtrado.columns:
                 # Merge para obtener familia del producto seleccionado
                 df_tickets_temp = df_tickets_filtrado[df_tickets_filtrado['Descripcion'] == producto_seleccionado].copy()
@@ -918,7 +917,7 @@ elif menu_opcion == "Relaciones por producto":
             
             # Aplicar filtro de familias a omitir
             if len(familias_omitir) > 0 and 'Codigo' in df_tickets_filtrado.columns:
-                # Si aÃºn no se hizo merge, hacerlo ahora
+                # Si aún no se hizo merge, hacerlo ahora
                 if 'Familia' not in df_combos.columns:
                     df_combos_temp = df_combos.copy()
                     df_consumos_temp3 = df_consumos.copy()
@@ -934,7 +933,7 @@ elif menu_opcion == "Relaciones por producto":
                         how='left'
                     )
                 
-                # Filtrar productos que NO estÃ©n en las familias a omitir
+                # Filtrar productos que NO estén en las familias a omitir
                 df_combos = df_combos[~df_combos['Familia'].isin(familias_omitir)]
             
             if len(df_combos) > 0:
@@ -965,16 +964,16 @@ elif menu_opcion == "Relaciones por producto":
             else:
                 st.info(f"No se encontraron combinaciones para '{producto_seleccionado}'")
     else:
-        st.warning("âš ï¸ Faltan columnas necesarias para anÃ¡lisis de combos")
+        st.warning("⚠️ Faltan columnas necesarias para análisis de combos")
 
 # ========== VISTA: RELACIONES POR FAMILIA ==========
 elif menu_opcion == "Relaciones por familia":
-    st.header("ðŸ“Š Relaciones por familia")
+    st.header("📊 Relaciones por familia")
     
     if 'Numero' in df_tickets_filtrado.columns and 'Descripcion' in df_tickets_filtrado.columns:
         
-        # AnÃ¡lisis por Familia
-        st.subheader("ðŸ“Š AnÃ¡lisis de Combos por Familia")
+        # Análisis por Familia
+        st.subheader("📊 Análisis de Combos por Familia")
         
         # Selector de cantidad de combos para familia
         cantidad_combos_familia = st.selectbox(
@@ -1002,7 +1001,7 @@ elif menu_opcion == "Relaciones por familia":
             
             familias_disponibles = sorted(df_con_familia['Familia'].dropna().unique().tolist())
             familia_combo_seleccionada = st.selectbox(
-                "Selecciona una familia para anÃ¡lisis de combos",
+                "Selecciona una familia para análisis de combos",
                 familias_disponibles,
                 key="familia_combo"
             )
@@ -1011,13 +1010,13 @@ elif menu_opcion == "Relaciones por familia":
                 # Obtener productos de la familia seleccionada
                 df_familia_combo = df_con_familia[df_con_familia['Familia'] == familia_combo_seleccionada]
                 
-                # Encontrar top 5 mÃ¡s vendidos de la familia
+                # Encontrar top 5 más vendidos de la familia
                 top5_familia_combo = df_familia_combo.groupby('Descripcion')['Cantidad'].sum().reset_index()
                 top5_familia_combo = top5_familia_combo.sort_values('Cantidad', ascending=False).head(5)
                 
                 st.write(f"**Top 5 Productos de {familia_combo_seleccionada}:**")
                 for producto in top5_familia_combo['Descripcion'].tolist():
-                    st.write(f"â€¢ {producto}")
+                    st.write(f"• {producto}")
                 
                 st.markdown("---")
                 
@@ -1025,7 +1024,7 @@ elif menu_opcion == "Relaciones por familia":
                 st.write(f"**Combinaciones de los Top 5 de {familia_combo_seleccionada}:**")
                 
                 for producto in top5_familia_combo['Descripcion'].tolist():
-                    with st.expander(f"ðŸ”— Combinaciones de: {producto}"):
+                    with st.expander(f"🔗 Combinaciones de: {producto}"):
                         # Encontrar tickets con este producto
                         tickets_producto = df_con_familia[
                             df_con_familia['Descripcion'] == producto
@@ -1065,13 +1064,13 @@ elif menu_opcion == "Relaciones por familia":
                         else:
                             st.info("No se encontraron combinaciones")
         else:
-            st.warning("âš ï¸ No hay datos de cÃ³digo para vincular con familias")
+            st.warning("⚠️ No hay datos de código para vincular con familias")
     else:
-        st.warning("âš ï¸ Faltan columnas necesarias para anÃ¡lisis de combos")
+        st.warning("⚠️ Faltan columnas necesarias para análisis de combos")
 
-# ========== VISTA: ANÃLISIS POR FAMILIA ==========
-elif menu_opcion == "AnÃ¡lisis por Familia":
-    st.header("ðŸ“Š AnÃ¡lisis por Familia")
+# ========== VISTA: ANÁLISIS POR FAMILIA ==========
+elif menu_opcion == "Análisis por Familia":
+    st.header("📊 Análisis por Familia")
     
     if 'Codigo' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
         # Hacer merge con consumos para obtener la familia (usando Codigo y Sucursal)
@@ -1089,8 +1088,8 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
             how='left'
         )
         
-        # GrÃ¡fico de torta: % de facturaciÃ³n por familia (fijo)
-        st.subheader("ðŸ’° DistribuciÃ³n de FacturaciÃ³n por Familia")
+        # Gráfico de torta: % de facturación por familia (fijo)
+        st.subheader("💰 Distribución de Facturación por Familia")
         
         # Filtrar valores nulos en Familia antes de agrupar
         df_con_familia_limpio = df_con_familia.dropna(subset=['Familia'])
@@ -1113,14 +1112,14 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
             facturacion_familia,
             values='Importe',
             names='Familia_Label',
-            title='Porcentaje de FacturaciÃ³n por Familia',
+            title='Porcentaje de Facturación por Familia',
             hole=0.4,
             custom_data=['Familia']
         )
         fig_familia.update_traces(
             textposition='inside',
             text=facturacion_familia['Familia'],
-            hovertemplate='<b>%{customdata[0]}</b><br>FacturaciÃ³n: $%{value:,.2f}<extra></extra>'
+            hovertemplate='<b>%{customdata[0]}</b><br>Facturación: $%{value:,.2f}<extra></extra>'
         )
         st.plotly_chart(fig_familia, use_container_width=True)
         
@@ -1131,21 +1130,21 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
         
         if len(familias_disponibles) > 0:
             familia_seleccionada = st.selectbox(
-                "Selecciona una familia para anÃ¡lisis detallado",
+                "Selecciona una familia para análisis detallado",
                 familias_disponibles,
                 key="familia_sel"
             )
         else:
-            st.warning("âš ï¸ No hay familias disponibles para esta sucursal")
+            st.warning("⚠️ No hay familias disponibles para esta sucursal")
             familia_seleccionada = None
         
         if familia_seleccionada:
             df_familia = df_con_familia[df_con_familia['Familia'] == familia_seleccionada]
             
-            st.subheader(f"ðŸ” AnÃ¡lisis Detallado: {familia_seleccionada}")
+            st.subheader(f"🔍 Análisis Detallado: {familia_seleccionada}")
             
-            # GrÃ¡fico de torta: % de productos dentro de la familia
-            st.markdown("### ðŸ¥§ DistribuciÃ³n de Productos en la Familia")
+            # Gráfico de torta: % de productos dentro de la familia
+            st.markdown("### 🥧 Distribución de Productos en la Familia")
             
             # Calcular importe total (Cantidad * Importe unitario)
             df_familia['Importe_Total'] = df_familia['Cantidad'] * df_familia['Importe']
@@ -1164,21 +1163,21 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
                 productos_familia,
                 values='Importe',
                 names='Producto_Label',
-                title=f'DistribuciÃ³n de FacturaciÃ³n en {familia_seleccionada}',
+                title=f'Distribución de Facturación en {familia_seleccionada}',
                 hole=0.4,
                 custom_data=['Descripcion']
             )
             fig_torta_familia.update_traces(
                 textposition='inside',
                 text=productos_familia['Descripcion'],
-                hovertemplate='<b>%{customdata[0]}</b><br>FacturaciÃ³n: $%{value:,.2f}<extra></extra>'
+                hovertemplate='<b>%{customdata[0]}</b><br>Facturación: $%{value:,.2f}<extra></extra>'
             )
             st.plotly_chart(fig_torta_familia, use_container_width=True)
             
             st.markdown("---")
             
-            # Lista completa de productos con cantidad y facturaciÃ³n
-            st.markdown("### ðŸ“‹ Lista Completa de Productos")
+            # Lista completa de productos con cantidad y facturación
+            st.markdown("### 📋 Lista Completa de Productos")
             
             if 'Cantidad' in df_familia.columns:
                 # Calcular importe total (Cantidad * Importe unitario)
@@ -1198,30 +1197,30 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
                 with col1:
                     st.metric("Total Cantidad Vendida", f"{total_cantidad_familia:,.0f}")
                 with col2:
-                    st.metric("Total FacturaciÃ³n", f"${total_importe_familia:,.2f}")
+                    st.metric("Total Facturación", f"${total_importe_familia:,.2f}")
                 
                 st.markdown("")  # Espacio
                 
                 # Calcular porcentajes
-                productos_completos['% FacturaciÃ³n'] = (productos_completos['Importe_Total'] / total_importe_familia * 100).round(2)
+                productos_completos['% Facturación'] = (productos_completos['Importe_Total'] / total_importe_familia * 100).round(2)
                 
-                # Ordenar por facturaciÃ³n descendente
+                # Ordenar por facturación descendente
                 productos_completos = productos_completos.sort_values('Importe_Total', ascending=False)
                 
-                # Formatear valores como en la tabla de facturaciÃ³n
-                tabla_display = productos_completos[['Descripcion', 'Cantidad', 'Importe_Total', '% FacturaciÃ³n']].copy()
+                # Formatear valores como en la tabla de facturación
+                tabla_display = productos_completos[['Descripcion', 'Cantidad', 'Importe_Total', '% Facturación']].copy()
                 tabla_display['Cantidad'] = tabla_display['Cantidad'].apply(lambda x: f"{x:,.0f}")
                 tabla_display['Importe_Total'] = tabla_display['Importe_Total'].apply(lambda x: f"${x:,.2f}")
-                tabla_display['% FacturaciÃ³n'] = tabla_display['% FacturaciÃ³n'].apply(lambda x: f"{x:.2f}%")
+                tabla_display['% Facturación'] = tabla_display['% Facturación'].apply(lambda x: f"{x:.2f}%")
                 tabla_display = tabla_display.rename(
                     columns={
                         'Cantidad': 'Cantidad Vendida',
-                        'Importe_Total': 'FacturaciÃ³n ($)',
-                        '% FacturaciÃ³n': '% facturado sobre total de la familia'
+                        'Importe_Total': 'Facturación ($)',
+                        '% Facturación': '% facturado sobre total de la familia'
                     }
                 )
                 
-                # Usar el mismo estilo que la tabla de facturaciÃ³n
+                # Usar el mismo estilo que la tabla de facturación
                 st.markdown("""
                     <style>
                     .centered-table td, .centered-table th {
@@ -1239,11 +1238,11 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
                     height=600
                 )
     else:
-        st.warning("âš ï¸ No hay datos suficientes para anÃ¡lisis por familia")
+        st.warning("⚠️ No hay datos suficientes para análisis por familia")
 
 # ========== VISTA: RANKING DE PRODUCTOS ==========
 elif menu_opcion == "Ranking de productos":
-    st.header("ðŸ† Ranking de productos")
+    st.header("🏆 Ranking de productos")
     
     if 'Descripcion' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
         # Calcular importe total por producto
@@ -1256,17 +1255,17 @@ elif menu_opcion == "Ranking de productos":
             'Importe_Total': 'sum'
         }).reset_index()
         
-        # Calcular porcentaje de facturaciÃ³n
+        # Calcular porcentaje de facturación
         facturacion_total_periodo = ranking_productos['Importe_Total'].sum()
-        ranking_productos['% FacturaciÃ³n'] = (ranking_productos['Importe_Total'] / facturacion_total_periodo * 100).round(2)
+        ranking_productos['% Facturación'] = (ranking_productos['Importe_Total'] / facturacion_total_periodo * 100).round(2)
         
-        # Ordenar de mÃ¡s vendido a menos vendido
+        # Ordenar de más vendido a menos vendido
         ranking_productos = ranking_productos.sort_values('Cantidad', ascending=False)
         
         # Agregar columna de ranking
         ranking_productos.insert(0, 'Ranking', range(1, len(ranking_productos) + 1))
         
-        # Mostrar mÃ©tricas del periodo
+        # Mostrar métricas del periodo
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Total de Productos", f"{len(ranking_productos):,}")
@@ -1274,33 +1273,33 @@ elif menu_opcion == "Ranking de productos":
             cantidad_total = ranking_productos['Cantidad'].sum()
             st.metric("Cantidad Total Vendida", f"{cantidad_total:,.0f}")
         with col3:
-            st.metric("FacturaciÃ³n Total", f"${facturacion_total_periodo:,.2f}")
+            st.metric("Facturación Total", f"${facturacion_total_periodo:,.2f}")
         
         st.markdown("---")
         
         # Nota explicativa
-        st.info("â„¹ï¸ **Nota:** El ranking se basa en la cantidad total vendida de cada producto durante el perÃ­odo seleccionado.")
+        st.info("ℹ️ **Nota:** El ranking se basa en la cantidad total vendida de cada producto durante el período seleccionado.")
         
         # Buscador de producto
-        buscar_producto = st.text_input("ðŸ” Buscar producto", placeholder="Escribe el nombre del producto...", key="buscar_ranking")
+        buscar_producto = st.text_input("🔍 Buscar producto", placeholder="Escribe el nombre del producto...", key="buscar_ranking")
         
         # Formatear valores para la tabla
         tabla_ranking = ranking_productos.copy()
         
-        # Filtrar por bÃºsqueda si hay texto
+        # Filtrar por búsqueda si hay texto
         if buscar_producto:
             tabla_ranking = tabla_ranking[tabla_ranking['Descripcion'].str.contains(buscar_producto, case=False, na=False)]
         
         tabla_ranking['Cantidad'] = tabla_ranking['Cantidad'].apply(lambda x: f"{x:,.0f}")
         tabla_ranking['Importe_Total'] = tabla_ranking['Importe_Total'].apply(lambda x: f"${x:,.2f}")
-        tabla_ranking['% FacturaciÃ³n'] = tabla_ranking['% FacturaciÃ³n'].apply(lambda x: f"{x:.2f}%")
+        tabla_ranking['% Facturación'] = tabla_ranking['% Facturación'].apply(lambda x: f"{x:.2f}%")
         
         tabla_ranking = tabla_ranking.rename(columns={
             'Ranking': '#',
             'Descripcion': 'Producto',
             'Cantidad': 'Cantidad Vendida',
-            'Importe_Total': 'FacturaciÃ³n Total',
-            '% FacturaciÃ³n': '% del Total'
+            'Importe_Total': 'Facturación Total',
+            '% Facturación': '% del Total'
         })
         
         # Aplicar estilos
@@ -1324,14 +1323,14 @@ elif menu_opcion == "Ranking de productos":
         else:
             st.warning(f"No se encontraron productos que coincidan con '{buscar_producto}'")
     else:
-        st.warning("âš ï¸ Faltan columnas necesarias para el ranking de productos")
+        st.warning("⚠️ Faltan columnas necesarias para el ranking de productos")
 
-# ========== VISTA: CREACIÃ“N DE COMBOS ==========
-elif menu_opcion == "CreaciÃ³n de Combos":
-    st.header("ðŸŽ¨ CreaciÃ³n de Combos")
+# ========== VISTA: CREACIÓN DE COMBOS ==========
+elif menu_opcion == "Creación de Combos":
+    st.header("🎨 Creación de Combos")
     
     if 'Codigo' in df_tickets_filtrado.columns and 'Descripcion' in df_tickets_filtrado.columns:
-        st.write("Selecciona una o mÃ¡s familias para ver los productos mÃ¡s y menos vendidos de cada una.")
+        st.write("Selecciona una o más familias para ver los productos más y menos vendidos de cada una.")
         
         # Hacer merge con consumos para obtener familias
         df_tickets_temp = df_tickets_filtrado.copy()
@@ -1368,13 +1367,13 @@ elif menu_opcion == "CreaciÃ³n de Combos":
         )
         
         if len(familias_seleccionadas) == 0:
-            st.info("â„¹ï¸ Selecciona al menos una familia para comenzar")
+            st.info("ℹ️ Selecciona al menos una familia para comenzar")
         else:
             st.markdown("---")
             
-            # Por cada familia seleccionada, mostrar top mÃ¡s y menos vendidos
+            # Por cada familia seleccionada, mostrar top más y menos vendidos
             for familia in familias_seleccionadas:
-                st.subheader(f"ðŸ“¦ {familia}")
+                st.subheader(f"📦 {familia}")
                 
                 # Filtrar productos de esta familia
                 df_familia = df_con_familia[df_con_familia['Familia'] == familia]
@@ -1384,7 +1383,7 @@ elif menu_opcion == "CreaciÃ³n de Combos":
                     productos_familia = df_familia.groupby('Descripcion')['Cantidad'].sum().reset_index()
                     productos_familia = productos_familia.sort_values('Cantidad', ascending=False)
                     
-                    # Top mÃ¡s vendidos
+                    # Top más vendidos
                     top_mas = productos_familia.head(cantidad_top).copy()
                     top_mas['Cantidad'] = top_mas['Cantidad'].apply(lambda x: f"{x:,.0f}")
                     
@@ -1396,7 +1395,7 @@ elif menu_opcion == "CreaciÃ³n de Combos":
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        st.markdown(f"**âœ… Top {cantidad_top} MÃ¡s Vendidos**")
+                        st.markdown(f"**✅ Top {cantidad_top} Más Vendidos**")
                         st.dataframe(
                             top_mas.rename(columns={'Descripcion': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
                             use_container_width=True,
@@ -1404,7 +1403,7 @@ elif menu_opcion == "CreaciÃ³n de Combos":
                         )
                     
                     with col2:
-                        st.markdown(f"**âš ï¸ Top {cantidad_top} Menos Vendidos**")
+                        st.markdown(f"**⚠️ Top {cantidad_top} Menos Vendidos**")
                         st.dataframe(
                             top_menos.rename(columns={'Descripcion': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
                             use_container_width=True,
@@ -1413,13 +1412,13 @@ elif menu_opcion == "CreaciÃ³n de Combos":
                     
                     st.markdown("---")
                 else:
-                    st.warning(f"âš ï¸ No hay datos de cantidad para la familia {familia}")
+                    st.warning(f"⚠️ No hay datos de cantidad para la familia {familia}")
     else:
-        st.warning("âš ï¸ Faltan columnas necesarias para anÃ¡lisis de combos")
+        st.warning("⚠️ Faltan columnas necesarias para análisis de combos")
 
-# ========== VISTA: ANÃLISIS DE REGALOS ==========
-elif menu_opcion == "AnÃ¡lisis de regalos":
-    st.header("ðŸŽ AnÃ¡lisis de regalos")
+# ========== VISTA: ANÁLISIS DE REGALOS ==========
+elif menu_opcion == "Análisis de regalos":
+    st.header("🎁 Análisis de regalos")
     
     if 'Numero' in df_tickets_filtrado.columns and 'Descripcion' in df_tickets_filtrado.columns:
         # Obtener todos los productos
@@ -1428,7 +1427,7 @@ elif menu_opcion == "AnÃ¡lisis de regalos":
         # Filtrar productos que contengan "regalo" (por defecto)
         productos_regalo = [p for p in productos_disponibles if 'regalo' in p.lower()]
         
-        # Determinar el Ã­ndice por defecto
+        # Determinar el índice por defecto
         if len(productos_regalo) > 0:
             producto_default = productos_regalo[0]
             indice_default = productos_disponibles.index(producto_default)
@@ -1476,7 +1475,7 @@ elif menu_opcion == "AnÃ¡lisis de regalos":
                     'Importe_Total': 'sum'
                 }).reset_index()
                 
-                # Ordenar por facturaciÃ³n descendente
+                # Ordenar por facturación descendente
                 resumen_productos = resumen_productos.sort_values('Importe_Total', ascending=False)
                 
                 # Calcular totales
@@ -1486,7 +1485,7 @@ elif menu_opcion == "AnÃ¡lisis de regalos":
                 ]['Cantidad'].sum()
                 costo_total = cantidad_regalo * costo_unitario
                 
-                # Mostrar mÃ©tricas
+                # Mostrar métricas
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("Tickets con el producto", f"{len(tickets_con_regalo):,}")
@@ -1510,11 +1509,11 @@ elif menu_opcion == "AnÃ¡lisis de regalos":
                 tabla_productos = tabla_productos.rename(columns={
                     'Descripcion': 'Producto',
                     'Cantidad': 'Cantidad Vendida',
-                    'Importe_Total': 'FacturaciÃ³n en estos Tickets'
+                    'Importe_Total': 'Facturación en estos Tickets'
                 })
                 
                 # Mostrar tabla
-                st.subheader("ðŸ“‹ Productos vendidos en tickets con el regalo")
+                st.subheader("📋 Productos vendidos en tickets con el regalo")
                 st.dataframe(
                     tabla_productos,
                     use_container_width=True,
@@ -1522,11 +1521,11 @@ elif menu_opcion == "AnÃ¡lisis de regalos":
                     height=500
                 )
             else:
-                st.warning("âš ï¸ Faltan columnas de Cantidad o Importe")
+                st.warning("⚠️ Faltan columnas de Cantidad o Importe")
         else:
             st.info(f"No se encontraron tickets con el producto '{producto_regalo_seleccionado}'")
     else:
-        st.warning("âš ï¸ Faltan columnas necesarias para el anÃ¡lisis de regalos")
+        st.warning("⚠️ Faltan columnas necesarias para el análisis de regalos")
 
 # Footer
 st.markdown("---")

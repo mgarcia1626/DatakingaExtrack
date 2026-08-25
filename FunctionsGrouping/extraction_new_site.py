@@ -1,4 +1,4 @@
-﻿"""
+"""
 DATAKINGA (new site: datakinga.cloudsysbar.com) - Extraction functions
 Uses requests + BeautifulSoup instead of Playwright/Selenium.
 Targets Pasadena (id=1) and Junin (id=2).
@@ -6,7 +6,7 @@ Targets Pasadena (id=1) and Junin (id=2).
 import os
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -109,7 +109,8 @@ def _fetch_detalle(session: requests.Session, internal_id: str, comanda_meta: di
 
 
 def _build_turno_map(session: requests.Session, sucursal_id: int, desde: datetime, hasta: datetime) -> dict:
-    """Returns {internal_id: turno_label} for all comandas of a sucursal."""
+    """Returns {internal_id: turno_label} for all comandas of a sucursal.
+    Queries day-by-day to avoid server-side table pagination truncation."""
     turno_map = {}
     try:
         r = session.get(f"{BASE_URL}/Comandas/Turnos", params=[("sucursalIds", sucursal_id)], timeout=10)
@@ -117,22 +118,86 @@ def _build_turno_map(session: requests.Session, sucursal_id: int, desde: datetim
     except Exception:
         return turno_map
 
-    for turno in turnos:
-        label = "Manana" if "a" in turno.lower() and "n" in turno.lower() else "Tarde/Noche"
-        r = session.get(
-            f"{BASE_URL}/Comandas",
-            params=[("sucursalIds", sucursal_id), ("turnos", turno),
-                    ("desde", desde.strftime("%Y-%m-%d")), ("hasta", hasta.strftime("%Y-%m-%d"))],
-            timeout=30,
-        )
-        soup = BeautifulSoup(r.text, "html.parser")
-        table = soup.find("table", {"id": "kt_comandas_table"})
-        if not table:
-            continue
-        for tr in table.select("tbody tr[data-comanda-id]"):
-            turno_map[tr["data-comanda-id"]] = label
+    current = desde
+    while current <= hasta:
+        day_str = current.strftime("%Y-%m-%d")
+        for turno in turnos:
+            label = "Manana" if "a" in turno.lower() and "n" in turno.lower() else "Tarde/Noche"
+            try:
+                r = session.get(
+                    f"{BASE_URL}/Comandas",
+                    params=[("sucursalIds", sucursal_id), ("turnos", turno),
+                            ("desde", day_str), ("hasta", day_str)],
+                    timeout=30,
+                )
+                soup = BeautifulSoup(r.text, "html.parser")
+                table = soup.find("table", {"id": "kt_comandas_table"})
+                if table:
+                    for tr in table.select("tbody tr[data-comanda-id]"):
+                        turno_map[tr["data-comanda-id"]] = label
+            except Exception:
+                pass
+        current += timedelta(days=1)
 
     return turno_map
+
+
+def _get_comandas_for_day(session, sucursal_id, sucursal_nombre, day_str, turno=None, turno_label=None):
+    """Fetch comanda rows for a single sucursal + day, optionally filtered by turno."""
+    params = [("sucursalIds", sucursal_id), ("desde", day_str), ("hasta", day_str)]
+    if turno:
+        params.append(("turnos", turno))
+    try:
+        r = session.get(f"{BASE_URL}/Comandas", params=params, timeout=30)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"   ! Error consultando {sucursal_nombre} {day_str} turno={turno}: {e}")
+        return []
+    soup = BeautifulSoup(r.text, "html.parser")
+    table = soup.find("table", {"id": "kt_comandas_table"})
+    if not table:
+        return []
+    result = []
+    for tr in table.select("tbody tr[data-comanda-id]"):
+        cells = tr.find_all("td")
+        if len(cells) < 3:
+            continue
+        result.append({
+            "internalId": tr["data-comanda-id"],
+            "Tipo": tr.get("data-estado", "").strip().upper(),
+            "Sucursal": sucursal_nombre,
+            "Turno": turno_label,
+        })
+    return result
+
+
+def _get_comandas_for_day(session, sucursal_id, sucursal_nombre, day_str, turno=None, turno_label=None):
+    """Fetch comanda rows for a single sucursal + day, optionally filtered by turno."""
+    params = [("sucursalIds", sucursal_id), ("desde", day_str), ("hasta", day_str)]
+    if turno:
+        params.append(("turnos", turno))
+    try:
+        r = session.get(f"{BASE_URL}/Comandas", params=params, timeout=30)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"   ! Error consultando {sucursal_nombre} {day_str} turno={turno}: {e}")
+        return []
+    soup = BeautifulSoup(r.text, "html.parser")
+    table = soup.find("table", {"id": "kt_comandas_table"})
+    if not table:
+        return []
+    result = []
+    for tr in table.select("tbody tr[data-comanda-id]"):
+        cells = tr.find_all("td")
+        if len(cells) < 3:
+            continue
+        result.append({
+            "internalId": tr["data-comanda-id"],
+            "Tipo": tr.get("data-estado", "").strip().upper(),
+            "Sucursal": sucursal_nombre,
+            "Turno": turno_label,
+        })
+    return result
 
 
 def extraer_tickets(session: requests.Session, desde: datetime, hasta: datetime) -> pd.DataFrame:
@@ -141,51 +206,57 @@ def extraer_tickets(session: requests.Session, desde: datetime, hasta: datetime)
     print("=" * 60)
     print(f"   Periodo: {desde.strftime('%d/%m/%Y')} -> {hasta.strftime('%d/%m/%Y')}")
 
-    # Step 1: build turno map per sucursal
-    print("   Construyendo mapa de turnos...")
-    turno_map = {}
-    for nombre, sid in SUCURSALES.items():
-        m = _build_turno_map(session, sid, desde, hasta)
-        turno_map.update(m)
-        print(f"   v {nombre}: {len(m)} comandas con turno asignado")
+    comandas_map = {}  # {internalId: comanda_meta} ? deduplicates across passes
 
-    # Step 2: get full Comandas list (all sucursales in one request)
-    params = []
-    for sid in SUCURSALES.values():
-        params.append(("sucursalIds", sid))
-    params += [
-        ("desde", desde.strftime("%Y-%m-%d")),
-        ("hasta", hasta.strftime("%Y-%m-%d")),
-    ]
-    r = session.get(f"{BASE_URL}/Comandas", params=params, timeout=30)
-    r.raise_for_status()
+    for nombre, sucursal_id in SUCURSALES.items():
+        print(f"\n   --- Sucursal: {nombre} ---")
 
-    soup = BeautifulSoup(r.text, "html.parser")
-    table = soup.find("table", {"id": "kt_comandas_table"})
-    if not table:
-        print("   ! Tabla de comandas no encontrada")
-        return pd.DataFrame()
+        # Get available turnos for this sucursal
+        try:
+            r = session.get(f"{BASE_URL}/Comandas/Turnos", params=[("sucursalIds", sucursal_id)], timeout=10)
+            turnos_disponibles = r.json()
+        except Exception:
+            turnos_disponibles = []
+        print(f"   Turnos disponibles: {turnos_disponibles}")
 
-    comandas = []
-    for tr in table.select("tbody tr[data-comanda-id]"):
-        cells = tr.find_all("td")
-        if len(cells) < 8:
-            continue
-        estado = tr.get("data-estado", "").strip().upper()
-        internal_id = tr["data-comanda-id"]
-        comandas.append({
-            "internalId": internal_id,
-            "Tipo": estado,
-            "Sucursal": cells[2].get_text(strip=True),
-            "Turno": turno_map.get(internal_id),
-        })
+        # Pass 1: query per turno per day (Noche + Tarde both map to Tarde/Noche)
+        for turno in turnos_disponibles:
+            label = "Manana" if "a" in turno.lower() and "n" in turno.lower() else "Tarde/Noche"
+            current = desde
+            count_turno = 0
+            while current <= hasta:
+                day_str = current.strftime("%Y-%m-%d")
+                rows = _get_comandas_for_day(session, sucursal_id, nombre, day_str, turno=turno, turno_label=label)
+                for row in rows:
+                    cid = row["internalId"]
+                    if cid not in comandas_map:
+                        comandas_map[cid] = row
+                        count_turno += 1
+                current += timedelta(days=1)
+            print(f"   v {nombre} turno '{turno}' ({label}): {count_turno} comandas")
 
-    print(f"   v {len(comandas)} comandas encontradas, obteniendo detalles...")
+        # Pass 2: query WITHOUT turno filter per day to catch comandas with no turno
+        current = desde
+        count_sin_turno = 0
+        while current <= hasta:
+            day_str = current.strftime("%Y-%m-%d")
+            rows = _get_comandas_for_day(session, sucursal_id, nombre, day_str, turno=None, turno_label=None)
+            for row in rows:
+                cid = row["internalId"]
+                if cid not in comandas_map:
+                    comandas_map[cid] = row  # Turno=None -> "Sin Turno" filled in dashboard
+                    count_sin_turno += 1
+            current += timedelta(days=1)
+        if count_sin_turno:
+            print(f"   v {nombre} sin turno: {count_sin_turno} comandas")
 
-    # Step 2: fetch detail for each comanda concurrently
+    comandas = list(comandas_map.values())
+    total = len(comandas)
+    print(f"\n   v {total} comandas totales, obteniendo detalles...")
+
+    # Fetch details concurrently
     all_rows = []
     max_workers = int(os.getenv("DETAIL_WORKERS", "10"))
-
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(_fetch_detalle, session, c["internalId"], c): c
@@ -197,10 +268,10 @@ def extraer_tickets(session: requests.Session, desde: datetime, hasta: datetime)
             all_rows.extend(rows)
             done += 1
             if done % 100 == 0:
-                print(f"   ... {done}/{len(comandas)} procesadas")
+                print(f"   ... {done}/{total} procesadas")
 
     df = pd.DataFrame(all_rows)
-    print(f"   v {len(df)} lineas de detalle ({len(comandas)} comandas)")
+    print(f"   v {len(df)} lineas de detalle ({total} comandas)")
     return df
 
 
