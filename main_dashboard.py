@@ -1,4 +1,4 @@
-﻿"""
+"""
 DATAKINGA - Dashboard Interactivo
 VisualizaciÃ³n de datos con Streamlit
 """
@@ -27,7 +27,24 @@ st.title("ðŸ“Š DataKinga Dashboard")
 st.markdown("---")
 
 # Cargar datos
-@st.cache_data(ttl=300)
+SUCURSAL_ALIASES = {
+    'PASADENA': 'Pasadena',
+    'COSTAVERDE': 'Costa Verde',
+    'COSTA VERDE': 'Costa Verde',
+    'JUNIN': 'Junin',
+    'ENTRE RIOS': 'Entre Rios',
+    'ENTRERIOS': 'Entre Rios',
+    'DRAGO': 'Drago',
+    'SAAVEDRA': 'Saavedra',
+    'SAENZ PENA': 'Saenz Pena',
+}
+
+def _normalizar_sucursal(nombre):
+    if pd.isna(nombre):
+        return nombre
+    return SUCURSAL_ALIASES.get(str(nombre).strip().upper(), str(nombre).strip().title())
+
+@st.cache_data(ttl=60)
 def cargar_datos():
     try:
         client = get_client()
@@ -37,6 +54,10 @@ def cargar_datos():
             df_tickets['Cantidad'] = pd.to_numeric(df_tickets['Cantidad'], errors='coerce')
         if 'Importe' in df_tickets.columns:
             df_tickets['Importe'] = pd.to_numeric(df_tickets['Importe'], errors='coerce')
+        if 'Sucursal' in df_tickets.columns:
+            df_tickets['Sucursal'] = df_tickets['Sucursal'].apply(_normalizar_sucursal)
+        if 'Sucursal' in df_consumos.columns:
+            df_consumos['Sucursal'] = df_consumos['Sucursal'].apply(_normalizar_sucursal)
         return df_tickets, df_consumos
     except Exception as e:
         st.error(f'Error al cargar datos desde Supabase: {str(e)}')
