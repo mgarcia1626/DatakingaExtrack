@@ -58,6 +58,12 @@ def cargar_datos():
             df_tickets['Sucursal'] = df_tickets['Sucursal'].apply(_normalizar_sucursal)
         if 'Sucursal' in df_consumos.columns:
             df_consumos['Sucursal'] = df_consumos['Sucursal'].apply(_normalizar_sucursal)
+        # Normalize accented column names to plain ASCII
+        df_tickets = df_tickets.rename(columns={
+            'Número': 'Numero',
+            'Código': 'Codigo',
+            'Descripción': 'Descripcion',
+        })
         return df_tickets, df_consumos
     except Exception as e:
         st.error(f'Error al cargar datos desde Supabase: {str(e)}')
@@ -379,13 +385,13 @@ if menu_opcion == "FacturaciÃ³n":
     
     # GrÃ¡fico de torta: % de facturaciÃ³n por familia
     st.subheader("ðŸ¥§ FacturaciÃ³n por Familia")
-    if 'CÃ³digo' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
+    if 'Codigo' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
         # Convertir columnas a string para el merge
         df_tickets_temp = df_tickets_filtrado.copy()
         df_consumos_temp = df_consumos.copy()
         
         # Limpiar y normalizar columnas
-        df_tickets_temp['CÃ³digo'] = df_tickets_temp['CÃ³digo'].astype(str).str.strip().str.upper()
+        df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str).str.strip().str.upper()
         df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str).str.strip().str.upper()
         df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str).str.strip().str.upper()
         df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str).str.strip().str.upper()
@@ -393,10 +399,10 @@ if menu_opcion == "FacturaciÃ³n":
         # Eliminar duplicados en consumos (mismo Codigo+Sucursal, mantener el primero)
         df_consumos_unique = df_consumos_temp.drop_duplicates(subset=['Codigo', 'Sucursal'], keep='first')
         
-        # Hacer merge con consumos para obtener la familia (usando CÃ³digo y Sucursal)
+        # Hacer merge con consumos para obtener la familia (usando Codigo y Sucursal)
         df_con_familia = df_tickets_temp.merge(
             df_consumos_unique[['Codigo', 'Familia', 'Sucursal']],
-            left_on=['CÃ³digo', 'Sucursal'],
+            left_on=['Codigo', 'Sucursal'],
             right_on=['Codigo', 'Sucursal'],
             how='left'
         )
@@ -468,11 +474,11 @@ elif menu_opcion == "Buscador de Productos en Tickets":
     st.markdown("Busca un producto y visualiza todos los tickets donde aparece, junto con los demÃ¡s productos de cada ticket.")
     
     # Verificar que tenemos las columnas necesarias
-    if 'DescripciÃ³n' not in df_tickets_filtrado.columns or 'NÃºmero' not in df_tickets_filtrado.columns:
-        st.error("âš ï¸ Faltan columnas necesarias (DescripciÃ³n o NÃºmero) en los datos")
+    if 'Descripcion' not in df_tickets_filtrado.columns or 'Numero' not in df_tickets_filtrado.columns:
+        st.error("âš ï¸ Faltan columnas necesarias (Descripcion o Numero) en los datos")
     else:
         # Selector de producto
-        productos_disponibles = sorted(df_tickets_filtrado['DescripciÃ³n'].dropna().unique().tolist())
+        productos_disponibles = sorted(df_tickets_filtrado['Descripcion'].dropna().unique().tolist())
         
         if len(productos_disponibles) == 0:
             st.warning("âš ï¸ No hay productos disponibles en el periodo seleccionado")
@@ -494,26 +500,26 @@ elif menu_opcion == "Buscador de Productos en Tickets":
             
             # Buscar todos los tickets que contienen el producto seleccionado
             tickets_con_producto = df_tickets_filtrado[
-                df_tickets_filtrado['DescripciÃ³n'] == producto_seleccionado
-            ]['NÃºmero'].unique()
+                df_tickets_filtrado['Descripcion'] == producto_seleccionado
+            ]['Numero'].unique()
             
             if len(tickets_con_producto) == 0:
                 st.info(f"â„¹ï¸ No se encontraron tickets con el producto '{producto_seleccionado}'")
             else:
                 # Filtrar todos los datos de esos tickets
                 df_tickets_completos = df_tickets_filtrado[
-                    df_tickets_filtrado['NÃºmero'].isin(tickets_con_producto)
+                    df_tickets_filtrado['Numero'].isin(tickets_con_producto)
                 ].copy()
                 
                 # Calcular estadÃ­sticas
                 total_tickets = len(tickets_con_producto)
                 total_items_producto = df_tickets_filtrado[
-                    df_tickets_filtrado['DescripciÃ³n'] == producto_seleccionado
+                    df_tickets_filtrado['Descripcion'] == producto_seleccionado
                 ]['Cantidad'].sum()
                 
                 # Calcular facturaciÃ³n del producto
                 if 'Importe' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns:
-                    df_producto = df_tickets_filtrado[df_tickets_filtrado['DescripciÃ³n'] == producto_seleccionado].copy()
+                    df_producto = df_tickets_filtrado[df_tickets_filtrado['Descripcion'] == producto_seleccionado].copy()
                     df_producto['Total'] = df_producto['Cantidad'] * df_producto['Importe']
                     facturacion_producto = df_producto['Total'].sum()
                 else:
@@ -541,7 +547,7 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                 st.subheader("ðŸ“‹ Detalle de Tickets")
                 
                 for i, numero_ticket in enumerate(tickets_con_producto[:50]):  # Limitar a 50 tickets para rendimiento
-                    df_ticket = df_tickets_completos[df_tickets_completos['NÃºmero'] == numero_ticket].copy()
+                    df_ticket = df_tickets_completos[df_tickets_completos['Numero'] == numero_ticket].copy()
                     
                     # InformaciÃ³n del ticket
                     fecha = df_ticket['Fecha'].iloc[0] if 'Fecha' in df_ticket.columns else "N/A"
@@ -573,7 +579,7 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                         st.write("**Productos en este ticket:**")
                         
                         # Preparar tabla de productos
-                        columnas_mostrar = ['DescripciÃ³n', 'Cantidad']
+                        columnas_mostrar = ['Descripcion', 'Cantidad']
                         if 'Importe' in df_ticket.columns:
                             columnas_mostrar.append('Importe')
                         if 'Total_Item' in df_ticket.columns:
@@ -587,7 +593,7 @@ elif menu_opcion == "Buscador de Productos en Tickets":
                         
                         # Resaltar el producto buscado
                         def highlight_producto(row):
-                            if row['DescripciÃ³n'] == producto_seleccionado:
+                            if row['Descripcion'] == producto_seleccionado:
                                 return ['background-color: #90EE90'] * len(row)
                             return [''] * len(row)
                         
@@ -617,10 +623,10 @@ elif menu_opcion == "Productos mas vendidos":
         key="cant_prod_1"
     )
     
-    if 'DescripciÃ³n' in df_tickets_filtrado.columns:
+    if 'Descripcion' in df_tickets_filtrado.columns:
         
         if 'Cantidad' in df_tickets_filtrado.columns:
-            top_cantidad = df_tickets_filtrado.groupby('DescripciÃ³n')['Cantidad'].sum().reset_index()
+            top_cantidad = df_tickets_filtrado.groupby('Descripcion')['Cantidad'].sum().reset_index()
             top_cantidad = top_cantidad.sort_values('Cantidad', ascending=False).head(cantidad_productos)
             
             col1, col2 = st.columns([2, 1])
@@ -629,7 +635,7 @@ elif menu_opcion == "Productos mas vendidos":
                 fig = px.bar(
                     top_cantidad,
                     x='Cantidad',
-                    y='DescripciÃ³n',
+                    y='Descripcion',
                     orientation='h',
                     title=f'Top {cantidad_productos} Productos MÃ¡s Vendidos',
                     color='Cantidad',
@@ -644,7 +650,7 @@ elif menu_opcion == "Productos mas vendidos":
                     hide_index=True
                 )
     else:
-        st.warning("âš ï¸ No hay columna DescripciÃ³n en los datos")
+        st.warning("âš ï¸ No hay columna Descripcion en los datos")
 
 # ========== VISTA: PRODUCTOS MENOS VENDIDOS ==========
 elif menu_opcion == "Productos menos vendidos":
@@ -658,10 +664,10 @@ elif menu_opcion == "Productos menos vendidos":
         key="cant_prod_2"
     )
     
-    if 'DescripciÃ³n' in df_tickets_filtrado.columns:
+    if 'Descripcion' in df_tickets_filtrado.columns:
         
         if 'Cantidad' in df_tickets_filtrado.columns:
-            bottom_cantidad = df_tickets_filtrado.groupby('DescripciÃ³n')['Cantidad'].sum().reset_index()
+            bottom_cantidad = df_tickets_filtrado.groupby('Descripcion')['Cantidad'].sum().reset_index()
             bottom_cantidad = bottom_cantidad.sort_values('Cantidad', ascending=True).head(cantidad_productos)
             
             col1, col2 = st.columns([2, 1])
@@ -670,7 +676,7 @@ elif menu_opcion == "Productos menos vendidos":
                 fig = px.bar(
                     bottom_cantidad,
                     x='Cantidad',
-                    y='DescripciÃ³n',
+                    y='Descripcion',
                     orientation='h',
                     title=f'Top {cantidad_productos} Productos Menos Vendidos',
                     color='Cantidad',
@@ -685,7 +691,7 @@ elif menu_opcion == "Productos menos vendidos":
                     hide_index=True
                 )
     else:
-        st.warning("âš ï¸ No hay columna DescripciÃ³n en los datos")
+        st.warning("âš ï¸ No hay columna Descripcion en los datos")
 
 # ========== VISTA: PRODUCTOS MEJOR FACTURACION ==========
 elif menu_opcion == "Productos mejor facturacion":
@@ -699,14 +705,14 @@ elif menu_opcion == "Productos mejor facturacion":
         key="cant_prod_3"
     )
     
-    if 'DescripciÃ³n' in df_tickets_filtrado.columns:
+    if 'Descripcion' in df_tickets_filtrado.columns:
         
         if 'Importe' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns:
             # Calcular importe total (Cantidad * Importe unitario)
             df_temp = df_tickets_filtrado.copy()
             df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
             
-            top_facturacion = df_temp.groupby('DescripciÃ³n').agg({
+            top_facturacion = df_temp.groupby('Descripcion').agg({
                 'Cantidad': 'sum',
                 'Importe_Total': 'sum'
             }).reset_index()
@@ -719,7 +725,7 @@ elif menu_opcion == "Productos mejor facturacion":
                 fig = px.bar(
                     top_facturacion,
                     x='Importe',
-                    y='DescripciÃ³n',
+                    y='Descripcion',
                     orientation='h',
                     title=f'Top {cantidad_productos} Productos por Ingresos',
                     color='Importe',
@@ -734,7 +740,7 @@ elif menu_opcion == "Productos mejor facturacion":
                     hide_index=True
                 )
     else:
-        st.warning("âš ï¸ No hay columna DescripciÃ³n en los datos")
+        st.warning("âš ï¸ No hay columna Descripcion en los datos")
 
 # ========== VISTA: PRODUCTOS PEOR FACTURACION ==========
 elif menu_opcion == "Productos peor facturacion":
@@ -748,14 +754,14 @@ elif menu_opcion == "Productos peor facturacion":
         key="cant_prod_4"
     )
     
-    if 'DescripciÃ³n' in df_tickets_filtrado.columns:
+    if 'Descripcion' in df_tickets_filtrado.columns:
         
         if 'Importe' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns:
             # Calcular importe total (Cantidad * Importe unitario)
             df_temp = df_tickets_filtrado.copy()
             df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
             
-            bottom_facturacion = df_temp.groupby('DescripciÃ³n').agg({
+            bottom_facturacion = df_temp.groupby('Descripcion').agg({
                 'Cantidad': 'sum',
                 'Importe_Total': 'sum'
             }).reset_index()
@@ -768,7 +774,7 @@ elif menu_opcion == "Productos peor facturacion":
                 fig = px.bar(
                     bottom_facturacion,
                     x='Importe',
-                    y='DescripciÃ³n',
+                    y='Descripcion',
                     orientation='h',
                     title=f'Top {cantidad_productos} Productos con Menor FacturaciÃ³n',
                     color='Importe',
@@ -783,13 +789,13 @@ elif menu_opcion == "Productos peor facturacion":
                     hide_index=True
                 )
     else:
-        st.warning("âš ï¸ No hay columna DescripciÃ³n en los datos")
+        st.warning("âš ï¸ No hay columna Descripcion en los datos")
 
 # ========== VISTA: RELACIONES POR PRODUCTO ==========
 elif menu_opcion == "Relaciones por producto":
     st.header("ðŸŽ¯ Relaciones por producto")
     
-    if 'NÃºmero' in df_tickets_filtrado.columns and 'DescripciÃ³n' in df_tickets_filtrado.columns:
+    if 'Numero' in df_tickets_filtrado.columns and 'Descripcion' in df_tickets_filtrado.columns:
         
         # AnÃ¡lisis por Producto
         st.subheader("ðŸ” AnÃ¡lisis de Combos por Producto")
@@ -802,7 +808,7 @@ elif menu_opcion == "Relaciones por producto":
             key="cantidad_combos_producto"
         )
         
-        productos_disponibles = sorted(df_tickets_filtrado['DescripciÃ³n'].dropna().unique().tolist())
+        productos_disponibles = sorted(df_tickets_filtrado['Descripcion'].dropna().unique().tolist())
         producto_seleccionado = st.selectbox(
             "Selecciona un producto para ver con quÃ© se vende",
             productos_disponibles,
@@ -817,17 +823,17 @@ elif menu_opcion == "Relaciones por producto":
         )
         
         # Multiselect para omitir familias especÃ­ficas
-        if 'CÃ³digo' in df_tickets_filtrado.columns:
+        if 'Codigo' in df_tickets_filtrado.columns:
             df_tickets_temp = df_tickets_filtrado.copy()
             df_consumos_temp = df_consumos.copy()
-            df_tickets_temp['CÃ³digo'] = df_tickets_temp['CÃ³digo'].astype(str)
+            df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str)
             df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
             df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
             df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
             
             df_temp_familias = df_tickets_temp.merge(
                 df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
-                left_on=['CÃ³digo', 'Sucursal'],
+                left_on=['Codigo', 'Sucursal'],
                 right_on=['Codigo', 'Sucursal'],
                 how='left'
             )
@@ -845,15 +851,15 @@ elif menu_opcion == "Relaciones por producto":
         if producto_seleccionado:
             # Encontrar todos los tickets que contienen el producto seleccionado
             tickets_con_producto = df_tickets_filtrado[
-                df_tickets_filtrado['DescripciÃ³n'] == producto_seleccionado
-            ]['NÃºmero'].unique()
+                df_tickets_filtrado['Descripcion'] == producto_seleccionado
+            ]['Numero'].unique()
             
             # Calcular cuÃ¡ntos tickets tienen SOLO este producto (solo en el ticket)
             tickets_solo = 0
             for ticket_num in tickets_con_producto:
                 productos_en_ticket = df_tickets_filtrado[
-                    df_tickets_filtrado['NÃºmero'] == ticket_num
-                ]['DescripciÃ³n'].nunique()
+                    df_tickets_filtrado['Numero'] == ticket_num
+                ]['Descripcion'].nunique()
                 if productos_en_ticket == 1:
                     tickets_solo += 1
             
@@ -868,23 +874,23 @@ elif menu_opcion == "Relaciones por producto":
             
             # Obtener todos los productos en esos tickets (excepto el producto seleccionado)
             df_combos = df_tickets_filtrado[
-                (df_tickets_filtrado['NÃºmero'].isin(tickets_con_producto)) &
-                (df_tickets_filtrado['DescripciÃ³n'] != producto_seleccionado)
+                (df_tickets_filtrado['Numero'].isin(tickets_con_producto)) &
+                (df_tickets_filtrado['Descripcion'] != producto_seleccionado)
             ].copy()
             
             # Si el checkbox estÃ¡ marcado, filtrar por familia
-            if omitir_misma_familia and 'CÃ³digo' in df_tickets_filtrado.columns:
+            if omitir_misma_familia and 'Codigo' in df_tickets_filtrado.columns:
                 # Merge para obtener familia del producto seleccionado
-                df_tickets_temp = df_tickets_filtrado[df_tickets_filtrado['DescripciÃ³n'] == producto_seleccionado].copy()
+                df_tickets_temp = df_tickets_filtrado[df_tickets_filtrado['Descripcion'] == producto_seleccionado].copy()
                 df_consumos_temp = df_consumos.copy()
-                df_tickets_temp['CÃ³digo'] = df_tickets_temp['CÃ³digo'].astype(str)
+                df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str)
                 df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
                 df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
                 df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
                 
                 df_temp = df_tickets_temp.merge(
                     df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
-                    left_on=['CÃ³digo', 'Sucursal'],
+                    left_on=['Codigo', 'Sucursal'],
                     right_on=['Codigo', 'Sucursal'],
                     how='left'
                 )
@@ -895,14 +901,14 @@ elif menu_opcion == "Relaciones por producto":
                     # Merge para obtener familia de los combos
                     df_combos_temp = df_combos.copy()
                     df_consumos_temp2 = df_consumos.copy()
-                    df_combos_temp['CÃ³digo'] = df_combos_temp['CÃ³digo'].astype(str)
+                    df_combos_temp['Codigo'] = df_combos_temp['Codigo'].astype(str)
                     df_combos_temp['Sucursal'] = df_combos_temp['Sucursal'].astype(str)
                     df_consumos_temp2['Codigo'] = df_consumos_temp2['Codigo'].astype(str)
                     df_consumos_temp2['Sucursal'] = df_consumos_temp2['Sucursal'].astype(str)
                     
                     df_combos = df_combos_temp.merge(
                         df_consumos_temp2[['Codigo', 'Familia', 'Sucursal']],
-                        left_on=['CÃ³digo', 'Sucursal'],
+                        left_on=['Codigo', 'Sucursal'],
                         right_on=['Codigo', 'Sucursal'],
                         how='left'
                     )
@@ -911,19 +917,19 @@ elif menu_opcion == "Relaciones por producto":
                     df_combos = df_combos[df_combos['Familia'] != familia_producto]
             
             # Aplicar filtro de familias a omitir
-            if len(familias_omitir) > 0 and 'CÃ³digo' in df_tickets_filtrado.columns:
+            if len(familias_omitir) > 0 and 'Codigo' in df_tickets_filtrado.columns:
                 # Si aÃºn no se hizo merge, hacerlo ahora
                 if 'Familia' not in df_combos.columns:
                     df_combos_temp = df_combos.copy()
                     df_consumos_temp3 = df_consumos.copy()
-                    df_combos_temp['CÃ³digo'] = df_combos_temp['CÃ³digo'].astype(str)
+                    df_combos_temp['Codigo'] = df_combos_temp['Codigo'].astype(str)
                     df_combos_temp['Sucursal'] = df_combos_temp['Sucursal'].astype(str)
                     df_consumos_temp3['Codigo'] = df_consumos_temp3['Codigo'].astype(str)
                     df_consumos_temp3['Sucursal'] = df_consumos_temp3['Sucursal'].astype(str)
                     
                     df_combos = df_combos_temp.merge(
                         df_consumos_temp3[['Codigo', 'Familia', 'Sucursal']],
-                        left_on=['CÃ³digo', 'Sucursal'],
+                        left_on=['Codigo', 'Sucursal'],
                         right_on=['Codigo', 'Sucursal'],
                         how='left'
                     )
@@ -933,7 +939,7 @@ elif menu_opcion == "Relaciones por producto":
             
             if len(df_combos) > 0:
                 # Contar frecuencia de cada producto
-                combos_frecuencia = df_combos.groupby('DescripciÃ³n').size().reset_index(name='Veces')
+                combos_frecuencia = df_combos.groupby('Descripcion').size().reset_index(name='Veces')
                 combos_frecuencia = combos_frecuencia.sort_values('Veces', ascending=False).head(cantidad_combos_producto)
                 
                 col1, col2 = st.columns([2, 1])
@@ -942,7 +948,7 @@ elif menu_opcion == "Relaciones por producto":
                     fig_combos = px.bar(
                         combos_frecuencia,
                         x='Veces',
-                        y='DescripciÃ³n',
+                        y='Descripcion',
                         orientation='h',
                         title=f'Top {cantidad_combos_producto} Productos que se Venden con "{producto_seleccionado}"',
                         color='Veces',
@@ -965,7 +971,7 @@ elif menu_opcion == "Relaciones por producto":
 elif menu_opcion == "Relaciones por familia":
     st.header("ðŸ“Š Relaciones por familia")
     
-    if 'NÃºmero' in df_tickets_filtrado.columns and 'DescripciÃ³n' in df_tickets_filtrado.columns:
+    if 'Numero' in df_tickets_filtrado.columns and 'Descripcion' in df_tickets_filtrado.columns:
         
         # AnÃ¡lisis por Familia
         st.subheader("ðŸ“Š AnÃ¡lisis de Combos por Familia")
@@ -978,18 +984,18 @@ elif menu_opcion == "Relaciones por familia":
             key="cantidad_combos_familia"
         )
         
-        if 'CÃ³digo' in df_tickets_filtrado.columns:
-            # Hacer merge con consumos para obtener familia (usando CÃ³digo y Sucursal)
+        if 'Codigo' in df_tickets_filtrado.columns:
+            # Hacer merge con consumos para obtener familia (usando Codigo y Sucursal)
             df_tickets_temp = df_tickets_filtrado.copy()
             df_consumos_temp = df_consumos.copy()
-            df_tickets_temp['CÃ³digo'] = df_tickets_temp['CÃ³digo'].astype(str)
+            df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str)
             df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
             df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
             df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
             
             df_con_familia = df_tickets_temp.merge(
                 df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
-                left_on=['CÃ³digo', 'Sucursal'],
+                left_on=['Codigo', 'Sucursal'],
                 right_on=['Codigo', 'Sucursal'],
                 how='left'
             )
@@ -1006,11 +1012,11 @@ elif menu_opcion == "Relaciones por familia":
                 df_familia_combo = df_con_familia[df_con_familia['Familia'] == familia_combo_seleccionada]
                 
                 # Encontrar top 5 mÃ¡s vendidos de la familia
-                top5_familia_combo = df_familia_combo.groupby('DescripciÃ³n')['Cantidad'].sum().reset_index()
+                top5_familia_combo = df_familia_combo.groupby('Descripcion')['Cantidad'].sum().reset_index()
                 top5_familia_combo = top5_familia_combo.sort_values('Cantidad', ascending=False).head(5)
                 
                 st.write(f"**Top 5 Productos de {familia_combo_seleccionada}:**")
-                for producto in top5_familia_combo['DescripciÃ³n'].tolist():
+                for producto in top5_familia_combo['Descripcion'].tolist():
                     st.write(f"â€¢ {producto}")
                 
                 st.markdown("---")
@@ -1018,22 +1024,22 @@ elif menu_opcion == "Relaciones por familia":
                 # Analizar combinaciones para cada producto del top 5
                 st.write(f"**Combinaciones de los Top 5 de {familia_combo_seleccionada}:**")
                 
-                for producto in top5_familia_combo['DescripciÃ³n'].tolist():
+                for producto in top5_familia_combo['Descripcion'].tolist():
                     with st.expander(f"ðŸ”— Combinaciones de: {producto}"):
                         # Encontrar tickets con este producto
                         tickets_producto = df_con_familia[
-                            df_con_familia['DescripciÃ³n'] == producto
-                        ]['NÃºmero'].unique()
+                            df_con_familia['Descripcion'] == producto
+                        ]['Numero'].unique()
                         
                         # Productos que aparecen en esos tickets (excepto el producto actual)
                         df_combos_familia = df_con_familia[
-                            (df_con_familia['NÃºmero'].isin(tickets_producto)) &
-                            (df_con_familia['DescripciÃ³n'] != producto)
+                            (df_con_familia['Numero'].isin(tickets_producto)) &
+                            (df_con_familia['Descripcion'] != producto)
                         ]
                         
                         if len(df_combos_familia) > 0:
                             # Contar por producto (sin importar la familia)
-                            combos_por_producto = df_combos_familia.groupby('DescripciÃ³n').size().reset_index(name='Veces')
+                            combos_por_producto = df_combos_familia.groupby('Descripcion').size().reset_index(name='Veces')
                             combos_por_producto = combos_por_producto.sort_values('Veces', ascending=False).head(cantidad_combos_familia)
                             
                             col1, col2 = st.columns([2, 1])
@@ -1042,7 +1048,7 @@ elif menu_opcion == "Relaciones por familia":
                                 fig = px.bar(
                                     combos_por_producto,
                                     x='Veces',
-                                    y='DescripciÃ³n',
+                                    y='Descripcion',
                                     orientation='h',
                                     title=f'Productos que se Combinan con {producto}',
                                     color='Veces',
@@ -1067,18 +1073,18 @@ elif menu_opcion == "Relaciones por familia":
 elif menu_opcion == "AnÃ¡lisis por Familia":
     st.header("ðŸ“Š AnÃ¡lisis por Familia")
     
-    if 'CÃ³digo' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
-        # Hacer merge con consumos para obtener la familia (usando CÃ³digo y Sucursal)
+    if 'Codigo' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
+        # Hacer merge con consumos para obtener la familia (usando Codigo y Sucursal)
         df_tickets_temp = df_tickets_filtrado.copy()
         df_consumos_temp = df_consumos.copy()
-        df_tickets_temp['CÃ³digo'] = df_tickets_temp['CÃ³digo'].astype(str)
+        df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str)
         df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
         df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
         df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
         
         df_con_familia = df_tickets_temp.merge(
             df_consumos_temp[['Codigo', 'Familia', 'Articulo', 'Sucursal']],
-            left_on=['CÃ³digo', 'Sucursal'],
+            left_on=['Codigo', 'Sucursal'],
             right_on=['Codigo', 'Sucursal'],
             how='left'
         )
@@ -1143,7 +1149,7 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
             
             # Calcular importe total (Cantidad * Importe unitario)
             df_familia['Importe_Total'] = df_familia['Cantidad'] * df_familia['Importe']
-            productos_familia = df_familia.groupby('DescripciÃ³n')['Importe_Total'].sum().reset_index()
+            productos_familia = df_familia.groupby('Descripcion')['Importe_Total'].sum().reset_index()
             productos_familia = productos_familia.rename(columns={'Importe_Total': 'Importe'})
             total_familia = productos_familia['Importe'].sum()
             productos_familia['Porcentaje'] = (productos_familia['Importe'] / total_familia * 100).round(2)
@@ -1151,7 +1157,7 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
             
             # Crear columna con nombre y porcentaje para la leyenda
             productos_familia['Producto_Label'] = productos_familia.apply(
-                lambda row: f"{row['DescripciÃ³n']} ({row['Porcentaje']:.1f}%)", axis=1
+                lambda row: f"{row['Descripcion']} ({row['Porcentaje']:.1f}%)", axis=1
             )
             
             fig_torta_familia = px.pie(
@@ -1160,11 +1166,11 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
                 names='Producto_Label',
                 title=f'DistribuciÃ³n de FacturaciÃ³n en {familia_seleccionada}',
                 hole=0.4,
-                custom_data=['DescripciÃ³n']
+                custom_data=['Descripcion']
             )
             fig_torta_familia.update_traces(
                 textposition='inside',
-                text=productos_familia['DescripciÃ³n'],
+                text=productos_familia['Descripcion'],
                 hovertemplate='<b>%{customdata[0]}</b><br>FacturaciÃ³n: $%{value:,.2f}<extra></extra>'
             )
             st.plotly_chart(fig_torta_familia, use_container_width=True)
@@ -1178,7 +1184,7 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
                 # Calcular importe total (Cantidad * Importe unitario)
                 df_familia['Importe_Total'] = df_familia['Cantidad'] * df_familia['Importe']
                 
-                productos_completos = df_familia.groupby('DescripciÃ³n').agg({
+                productos_completos = df_familia.groupby('Descripcion').agg({
                     'Cantidad': 'sum',
                     'Importe_Total': 'sum'
                 }).reset_index()
@@ -1203,7 +1209,7 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
                 productos_completos = productos_completos.sort_values('Importe_Total', ascending=False)
                 
                 # Formatear valores como en la tabla de facturaciÃ³n
-                tabla_display = productos_completos[['DescripciÃ³n', 'Cantidad', 'Importe_Total', '% FacturaciÃ³n']].copy()
+                tabla_display = productos_completos[['Descripcion', 'Cantidad', 'Importe_Total', '% FacturaciÃ³n']].copy()
                 tabla_display['Cantidad'] = tabla_display['Cantidad'].apply(lambda x: f"{x:,.0f}")
                 tabla_display['Importe_Total'] = tabla_display['Importe_Total'].apply(lambda x: f"${x:,.2f}")
                 tabla_display['% FacturaciÃ³n'] = tabla_display['% FacturaciÃ³n'].apply(lambda x: f"{x:.2f}%")
@@ -1239,13 +1245,13 @@ elif menu_opcion == "AnÃ¡lisis por Familia":
 elif menu_opcion == "Ranking de productos":
     st.header("ðŸ† Ranking de productos")
     
-    if 'DescripciÃ³n' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
+    if 'Descripcion' in df_tickets_filtrado.columns and 'Cantidad' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
         # Calcular importe total por producto
         df_temp = df_tickets_filtrado.copy()
         df_temp['Importe_Total'] = df_temp['Cantidad'] * df_temp['Importe']
         
         # Agrupar por producto
-        ranking_productos = df_temp.groupby('DescripciÃ³n').agg({
+        ranking_productos = df_temp.groupby('Descripcion').agg({
             'Cantidad': 'sum',
             'Importe_Total': 'sum'
         }).reset_index()
@@ -1283,7 +1289,7 @@ elif menu_opcion == "Ranking de productos":
         
         # Filtrar por bÃºsqueda si hay texto
         if buscar_producto:
-            tabla_ranking = tabla_ranking[tabla_ranking['DescripciÃ³n'].str.contains(buscar_producto, case=False, na=False)]
+            tabla_ranking = tabla_ranking[tabla_ranking['Descripcion'].str.contains(buscar_producto, case=False, na=False)]
         
         tabla_ranking['Cantidad'] = tabla_ranking['Cantidad'].apply(lambda x: f"{x:,.0f}")
         tabla_ranking['Importe_Total'] = tabla_ranking['Importe_Total'].apply(lambda x: f"${x:,.2f}")
@@ -1291,7 +1297,7 @@ elif menu_opcion == "Ranking de productos":
         
         tabla_ranking = tabla_ranking.rename(columns={
             'Ranking': '#',
-            'DescripciÃ³n': 'Producto',
+            'Descripcion': 'Producto',
             'Cantidad': 'Cantidad Vendida',
             'Importe_Total': 'FacturaciÃ³n Total',
             '% FacturaciÃ³n': '% del Total'
@@ -1324,20 +1330,20 @@ elif menu_opcion == "Ranking de productos":
 elif menu_opcion == "CreaciÃ³n de Combos":
     st.header("ðŸŽ¨ CreaciÃ³n de Combos")
     
-    if 'CÃ³digo' in df_tickets_filtrado.columns and 'DescripciÃ³n' in df_tickets_filtrado.columns:
+    if 'Codigo' in df_tickets_filtrado.columns and 'Descripcion' in df_tickets_filtrado.columns:
         st.write("Selecciona una o mÃ¡s familias para ver los productos mÃ¡s y menos vendidos de cada una.")
         
         # Hacer merge con consumos para obtener familias
         df_tickets_temp = df_tickets_filtrado.copy()
         df_consumos_temp = df_consumos.copy()
-        df_tickets_temp['CÃ³digo'] = df_tickets_temp['CÃ³digo'].astype(str).str.strip().str.upper()
+        df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str).str.strip().str.upper()
         df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str).str.strip().str.upper()
         df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str).str.strip().str.upper()
         df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str).str.strip().str.upper()
         
         df_con_familia = df_tickets_temp.merge(
             df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
-            left_on=['CÃ³digo', 'Sucursal'],
+            left_on=['Codigo', 'Sucursal'],
             right_on=['Codigo', 'Sucursal'],
             how='left'
         )
@@ -1375,7 +1381,7 @@ elif menu_opcion == "CreaciÃ³n de Combos":
                 
                 if len(df_familia) > 0 and 'Cantidad' in df_familia.columns:
                     # Agrupar por producto y sumar cantidades
-                    productos_familia = df_familia.groupby('DescripciÃ³n')['Cantidad'].sum().reset_index()
+                    productos_familia = df_familia.groupby('Descripcion')['Cantidad'].sum().reset_index()
                     productos_familia = productos_familia.sort_values('Cantidad', ascending=False)
                     
                     # Top mÃ¡s vendidos
@@ -1392,7 +1398,7 @@ elif menu_opcion == "CreaciÃ³n de Combos":
                     with col1:
                         st.markdown(f"**âœ… Top {cantidad_top} MÃ¡s Vendidos**")
                         st.dataframe(
-                            top_mas.rename(columns={'DescripciÃ³n': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
+                            top_mas.rename(columns={'Descripcion': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
                             use_container_width=True,
                             hide_index=True
                         )
@@ -1400,7 +1406,7 @@ elif menu_opcion == "CreaciÃ³n de Combos":
                     with col2:
                         st.markdown(f"**âš ï¸ Top {cantidad_top} Menos Vendidos**")
                         st.dataframe(
-                            top_menos.rename(columns={'DescripciÃ³n': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
+                            top_menos.rename(columns={'Descripcion': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
                             use_container_width=True,
                             hide_index=True
                         )
@@ -1415,9 +1421,9 @@ elif menu_opcion == "CreaciÃ³n de Combos":
 elif menu_opcion == "AnÃ¡lisis de regalos":
     st.header("ðŸŽ AnÃ¡lisis de regalos")
     
-    if 'NÃºmero' in df_tickets_filtrado.columns and 'DescripciÃ³n' in df_tickets_filtrado.columns:
+    if 'Numero' in df_tickets_filtrado.columns and 'Descripcion' in df_tickets_filtrado.columns:
         # Obtener todos los productos
-        productos_disponibles = sorted(df_tickets_filtrado['DescripciÃ³n'].dropna().unique().tolist())
+        productos_disponibles = sorted(df_tickets_filtrado['Descripcion'].dropna().unique().tolist())
         
         # Filtrar productos que contengan "regalo" (por defecto)
         productos_regalo = [p for p in productos_disponibles if 'regalo' in p.lower()]
@@ -1451,13 +1457,13 @@ elif menu_opcion == "AnÃ¡lisis de regalos":
         
         # Buscar tickets que contienen el producto regalo seleccionado
         tickets_con_regalo = df_tickets_filtrado[
-            df_tickets_filtrado['DescripciÃ³n'] == producto_regalo_seleccionado
-        ]['NÃºmero'].unique()
+            df_tickets_filtrado['Descripcion'] == producto_regalo_seleccionado
+        ]['Numero'].unique()
         
         if len(tickets_con_regalo) > 0:
             # Filtrar todos los productos en esos tickets
             df_productos_en_tickets = df_tickets_filtrado[
-                df_tickets_filtrado['NÃºmero'].isin(tickets_con_regalo)
+                df_tickets_filtrado['Numero'].isin(tickets_con_regalo)
             ].copy()
             
             # Calcular importe total por producto
@@ -1465,7 +1471,7 @@ elif menu_opcion == "AnÃ¡lisis de regalos":
                 df_productos_en_tickets['Importe_Total'] = df_productos_en_tickets['Cantidad'] * df_productos_en_tickets['Importe']
                 
                 # Agrupar por producto
-                resumen_productos = df_productos_en_tickets.groupby('DescripciÃ³n').agg({
+                resumen_productos = df_productos_en_tickets.groupby('Descripcion').agg({
                     'Cantidad': 'sum',
                     'Importe_Total': 'sum'
                 }).reset_index()
@@ -1476,7 +1482,7 @@ elif menu_opcion == "AnÃ¡lisis de regalos":
                 # Calcular totales
                 facturacion_total_tickets = resumen_productos['Importe_Total'].sum()
                 cantidad_regalo = resumen_productos[
-                    resumen_productos['DescripciÃ³n'] == producto_regalo_seleccionado
+                    resumen_productos['Descripcion'] == producto_regalo_seleccionado
                 ]['Cantidad'].sum()
                 costo_total = cantidad_regalo * costo_unitario
                 
@@ -1502,7 +1508,7 @@ elif menu_opcion == "AnÃ¡lisis de regalos":
                 tabla_productos['Importe_Total'] = tabla_productos['Importe_Total'].apply(lambda x: f"${x:,.2f}")
                 
                 tabla_productos = tabla_productos.rename(columns={
-                    'DescripciÃ³n': 'Producto',
+                    'Descripcion': 'Producto',
                     'Cantidad': 'Cantidad Vendida',
                     'Importe_Total': 'FacturaciÃ³n en estos Tickets'
                 })
