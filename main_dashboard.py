@@ -951,20 +951,9 @@ elif menu_opcion == "Relaciones por producto":
         )
         
         # Multiselect para omitir familias específicas
-        if 'Codigo' in df_tickets_filtrado.columns:
-            df_tickets_temp = df_tickets_filtrado.copy()
-            df_consumos_temp = df_consumos.copy()
-            df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str)
-            df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
-            df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
-            df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
-            
-            df_temp_familias = df_tickets_temp.merge(
-                df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
-                left_on=['Codigo', 'Sucursal'],
-                right_on=['Codigo', 'Sucursal'],
-                how='left'
-            )
+        if 'Descripcion' in df_tickets_filtrado.columns:
+            df_temp_familias = _agregar_familia(df_tickets_filtrado.copy(), df_consumos.copy()).copy()
+            df_temp_familias = df_temp_familias.dropna(subset=['Familia'])
             familias_disponibles_filtro = sorted(df_temp_familias['Familia'].dropna().unique().tolist())
             
             familias_omitir = st.multiselect(
@@ -1007,60 +996,22 @@ elif menu_opcion == "Relaciones por producto":
             ].copy()
             
             # Si el checkbox está marcado, filtrar por familia
-            if omitir_misma_familia and 'Codigo' in df_tickets_filtrado.columns:
-                # Merge para obtener familia del producto seleccionado
-                df_tickets_temp = df_tickets_filtrado[df_tickets_filtrado['Descripcion'] == producto_seleccionado].copy()
-                df_consumos_temp = df_consumos.copy()
-                df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str)
-                df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
-                df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
-                df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
-                
-                df_temp = df_tickets_temp.merge(
-                    df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
-                    left_on=['Codigo', 'Sucursal'],
-                    right_on=['Codigo', 'Sucursal'],
-                    how='left'
-                )
+            if omitir_misma_familia and 'Descripcion' in df_tickets_filtrado.columns:
+                df_temp = _agregar_familia(
+                    df_tickets_filtrado[df_tickets_filtrado['Descripcion'] == producto_seleccionado].copy(),
+                    df_consumos.copy()
+                ).copy()
+                df_temp = df_temp.dropna(subset=['Familia'])
                 
                 if len(df_temp) > 0 and 'Familia' in df_temp.columns:
                     familia_producto = df_temp['Familia'].iloc[0]
-                    
-                    # Merge para obtener familia de los combos
-                    df_combos_temp = df_combos.copy()
-                    df_consumos_temp2 = df_consumos.copy()
-                    df_combos_temp['Codigo'] = df_combos_temp['Codigo'].astype(str)
-                    df_combos_temp['Sucursal'] = df_combos_temp['Sucursal'].astype(str)
-                    df_consumos_temp2['Codigo'] = df_consumos_temp2['Codigo'].astype(str)
-                    df_consumos_temp2['Sucursal'] = df_consumos_temp2['Sucursal'].astype(str)
-                    
-                    df_combos = df_combos_temp.merge(
-                        df_consumos_temp2[['Codigo', 'Familia', 'Sucursal']],
-                        left_on=['Codigo', 'Sucursal'],
-                        right_on=['Codigo', 'Sucursal'],
-                        how='left'
-                    )
-                    
-                    # Filtrar productos de diferente familia
+                    df_combos = _agregar_familia(df_combos.copy(), df_consumos.copy()).copy()
                     df_combos = df_combos[df_combos['Familia'] != familia_producto]
             
             # Aplicar filtro de familias a omitir
-            if len(familias_omitir) > 0 and 'Codigo' in df_tickets_filtrado.columns:
-                # Si aún no se hizo merge, hacerlo ahora
+            if len(familias_omitir) > 0 and 'Descripcion' in df_tickets_filtrado.columns:
                 if 'Familia' not in df_combos.columns:
-                    df_combos_temp = df_combos.copy()
-                    df_consumos_temp3 = df_consumos.copy()
-                    df_combos_temp['Codigo'] = df_combos_temp['Codigo'].astype(str)
-                    df_combos_temp['Sucursal'] = df_combos_temp['Sucursal'].astype(str)
-                    df_consumos_temp3['Codigo'] = df_consumos_temp3['Codigo'].astype(str)
-                    df_consumos_temp3['Sucursal'] = df_consumos_temp3['Sucursal'].astype(str)
-                    
-                    df_combos = df_combos_temp.merge(
-                        df_consumos_temp3[['Codigo', 'Familia', 'Sucursal']],
-                        left_on=['Codigo', 'Sucursal'],
-                        right_on=['Codigo', 'Sucursal'],
-                        how='left'
-                    )
+                    df_combos = _agregar_familia(df_combos.copy(), df_consumos.copy()).copy()
                 
                 # Filtrar productos que NO estén en las familias a omitir
                 df_combos = df_combos[~df_combos['Familia'].isin(familias_omitir)]
@@ -1112,28 +1063,22 @@ elif menu_opcion == "Relaciones por familia":
             key="cantidad_combos_familia"
         )
         
-        if 'Codigo' in df_tickets_filtrado.columns:
-            # Hacer merge con consumos para obtener familia (usando Codigo y Sucursal)
-            df_tickets_temp = df_tickets_filtrado.copy()
-            df_consumos_temp = df_consumos.copy()
-            df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str)
-            df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
-            df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
-            df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
-            
-            df_con_familia = df_tickets_temp.merge(
-                df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
-                left_on=['Codigo', 'Sucursal'],
-                right_on=['Codigo', 'Sucursal'],
-                how='left'
-            )
+        if 'Descripcion' in df_tickets_filtrado.columns:
+            # Usar el matching por nombre/descripción para obtener familia, aunque no haya código confiable
+            df_con_familia = _agregar_familia(df_tickets_filtrado.copy(), df_consumos.copy()).copy()
+            if 'Cantidad' in df_con_familia.columns:
+                df_con_familia['Cantidad'] = pd.to_numeric(df_con_familia['Cantidad'], errors='coerce')
+            df_con_familia = df_con_familia.dropna(subset=['Familia'])
             
             familias_disponibles = sorted(df_con_familia['Familia'].dropna().unique().tolist())
-            familia_combo_seleccionada = st.selectbox(
-                "Selecciona una familia para análisis de combos",
-                familias_disponibles,
-                key="familia_combo"
-            )
+            if len(familias_disponibles) == 0:
+                st.warning("⚠️ No hay familias disponibles para este período")
+            else:
+                familia_combo_seleccionada = st.selectbox(
+                    "Selecciona una familia para análisis de combos",
+                    familias_disponibles,
+                    key="familia_combo"
+                )
             
             if familia_combo_seleccionada:
                 # Obtener productos de la familia seleccionada
@@ -1451,23 +1396,14 @@ elif menu_opcion == "Ranking de productos":
 elif menu_opcion == "Creación de Combos":
     st.header("🎨 Creación de Combos")
     
-    if 'Codigo' in df_tickets_filtrado.columns and 'Descripcion' in df_tickets_filtrado.columns:
+    if 'Descripcion' in df_tickets_filtrado.columns:
         st.write("Selecciona una o más familias para ver los productos más y menos vendidos de cada una.")
         
-        # Hacer merge con consumos para obtener familias
-        df_tickets_temp = df_tickets_filtrado.copy()
-        df_consumos_temp = df_consumos.copy()
-        df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str).str.strip().str.upper()
-        df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str).str.strip().str.upper()
-        df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str).str.strip().str.upper()
-        df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str).str.strip().str.upper()
-        
-        df_con_familia = df_tickets_temp.merge(
-            df_consumos_temp[['Codigo', 'Familia', 'Sucursal']],
-            left_on=['Codigo', 'Sucursal'],
-            right_on=['Codigo', 'Sucursal'],
-            how='left'
-        )
+        # Usar el matching por nombre/descripción para obtener familias cuando el código no es confiable
+        df_con_familia = _agregar_familia(df_tickets_filtrado.copy(), df_consumos.copy()).copy()
+        if 'Cantidad' in df_con_familia.columns:
+            df_con_familia['Cantidad'] = pd.to_numeric(df_con_familia['Cantidad'], errors='coerce')
+        df_con_familia = df_con_familia.dropna(subset=['Familia'])
         
         # Obtener lista de familias disponibles
         familias_disponibles = sorted(df_con_familia['Familia'].dropna().unique().tolist())
