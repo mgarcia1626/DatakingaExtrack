@@ -2,6 +2,9 @@
 DATAKINGA - Dashboard Interactivo
 Visualización de datos con Streamlit
 """
+import re
+import unicodedata
+from difflib import SequenceMatcher
 import streamlit as st
 import pandas as pd
 import os
@@ -13,6 +16,94 @@ from FunctionsGrouping.supabase_client import get_client, fetch_tickets, fetch_c
 
 # Cargar variables de entorno
 load_dotenv()
+
+def _normalizar_codigo(value):
+    if value is None or pd.isna(value):
+        return ""
+    codigo = str(value).strip().upper().replace(" ", "")
+    codigo = re.sub(r"[^A-Z0-9]", "", codigo)
+    if not codigo or codigo in {"NAN", "NONE"}:
+        return ""
+    if codigo.isdigit():
+        return str(int(codigo))
+    return codigo
+
+def _normalizar_sucursal(value):
+    if value is None or pd.isna(value):
+        return ""
+    return str(value).strip().upper()
+
+def _normalizar_texto(value):
+    if value is None or pd.isna(value):
+        return ''
+    text = unicodedata.normalize('NFKD', str(value))
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def _agregar_familia(df_tickets, df_consumos):
+    """Match cada ticket con la familia usando el nombre del producto; el codigo queda como fallback opcional."""
+    if df_tickets.empty or df_consumos.empty:
+        return df_tickets.copy()
+
+    tickets = df_tickets.copy().rename(columns={'Número': 'Numero', 'Código': 'Codigo', 'Descripción': 'Descripcion'})
+    consumos = df_consumos.copy()
+
+    if 'Codigo' in consumos.columns:
+        consumos['Codigo'] = consumos['Codigo'].fillna('').astype(str).str.strip()
+    if 'Articulo' in consumos.columns:
+        consumos['Articulo'] = consumos['Articulo'].fillna('').astype(str).str.strip()
+    if 'Sucursal' in consumos.columns:
+        consumos['Sucursal'] = consumos['Sucursal'].fillna('').astype(str).str.strip()
+
+    for col in ['Codigo', 'Sucursal', 'Descripcion']:
+        if col in tickets.columns:
+            tickets[col] = tickets[col].fillna('').astype(str).str.strip()
+
+    tickets['_sucursal_match'] = tickets['Sucursal'].map(_normalizar_sucursal) if 'Sucursal' in tickets.columns else ''
+    tickets['_descripcion_match'] = tickets['Descripcion'].map(_normalizar_texto) if 'Descripcion' in tickets.columns else ''
+    consumos['_sucursal_match'] = consumos['Sucursal'].map(_normalizar_sucursal) if 'Sucursal' in consumos.columns else ''
+    consumos['_descripcion_match'] = consumos['Articulo'].map(_normalizar_texto) if 'Articulo' in consumos.columns else ''
+
+    lookup_desc = consumos[['Familia', '_descripcion_match', '_sucursal_match']].copy()
+    lookup_desc = lookup_desc.dropna(subset=['Familia', '_descripcion_match', '_sucursal_match'])
+    lookup_desc = lookup_desc.drop_duplicates(subset=['_descripcion_match', '_sucursal_match'], keep='last')
+    lookup_desc_map = lookup_desc.set_index(['_descripcion_match', '_sucursal_match'])['Familia'].to_dict()
+
+    merged = tickets.merge(
+        lookup_desc.rename(columns={'_descripcion_match': 'Descripcion_match', '_sucursal_match': 'Sucursal_match'}),
+        left_on=['_descripcion_match', '_sucursal_match'],
+        right_on=['Descripcion_match', 'Sucursal_match'],
+        how='left',
+        suffixes=('_ticket', '_desc')
+    )
+
+    def _resolver_familia(row):
+        if pd.notna(row.get('Familia_desc')):
+            return row['Familia_desc']
+        desc = row.get('_descripcion_match', '')
+        suc = row.get('_sucursal_match', '')
+        if not desc or not suc:
+            return None
+        key = (desc, suc)
+        if key in lookup_desc_map:
+            return lookup_desc_map[key]
+        candidates = [
+            (item[0], item[1]) for item in lookup_desc[['Familia', '_descripcion_match', '_sucursal_match']].itertuples(index=False, name=None)
+            if item[2] == suc
+        ]
+        if not candidates:
+            return None
+        best = max(candidates, key=lambda item: SequenceMatcher(None, desc, item[1]).ratio())
+        score = SequenceMatcher(None, desc, best[1]).ratio()
+        return best[0] if score >= 0.7 else None
+
+    merged['Familia'] = merged.apply(_resolver_familia, axis=1)
+    merged = merged.drop(columns=['Descripcion_match', 'Sucursal_match', 'Familia_desc'], errors='ignore')
+    return merged
 
 # Configuración de la página
 st.set_page_config(
@@ -305,11 +396,28 @@ if menu_opcion == "Facturación":
                 color_discrete_map=color_map,
                 text='Texto'
             )
+
+            total_por_dia = facturacion_diaria_turno.groupby('Fecha_Label', as_index=False)['Importe'].sum()
+            total_por_dia['Total_Label'] = total_por_dia['Importe'].apply(
+                lambda v: f"${v:,.0f}" if v < 1000 else f"${v/1000:.1f}k" if v < 1000000 else f"${v/1000000:.1f}M"
+            )
+            fig_barras.add_trace(
+                go.Scatter(
+                    x=total_por_dia['Fecha_Label'],
+                    y=total_por_dia['Importe'],
+                    mode='text',
+                    text=total_por_dia['Total_Label'],
+                    textposition='top center',
+                    textfont=dict(color='#1C2833', size=12, family='Arial', weight='bold'),
+                    showlegend=False,
+                    hoverinfo='skip'
+                )
+            )
             
             # Configurar el texto dentro de las barras (horizontal, números oscuros)
             fig_barras.update_traces(
+                selector=dict(type='bar'),
                 textposition='inside',
-                textangle=0,
                 textfont=dict(color='#1C2833', size=11, family='Arial', weight='bold')
             )
         else:
@@ -363,12 +471,29 @@ if menu_opcion == "Facturación":
                 labels={'Importe': 'Facturación ($)', 'Fecha_Label': 'Día y Fecha'},
                 text='Texto'
             )
+
+            total_por_dia = facturacion_diaria[['Fecha_Label', 'Importe']].copy()
+            total_por_dia['Total_Label'] = total_por_dia['Importe'].apply(
+                lambda v: f"${v:,.0f}" if v < 1000 else f"${v/1000:.1f}k" if v < 1000000 else f"${v/1000000:.1f}M"
+            )
+            fig_barras.add_trace(
+                go.Scatter(
+                    x=total_por_dia['Fecha_Label'],
+                    y=total_por_dia['Importe'],
+                    mode='text',
+                    text=total_por_dia['Total_Label'],
+                    textposition='top center',
+                    textfont=dict(color='#1C2833', size=12, family='Arial', weight='bold'),
+                    showlegend=False,
+                    hoverinfo='skip'
+                )
+            )
             
             # Configurar colores modernos y texto oscuro dentro de las barras (horizontal)
             fig_barras.update_traces(
+                selector=dict(type='bar'),
                 marker_color='#5DADE2',
                 textposition='inside',
-                textangle=0,
                 textfont=dict(color='#1C2833', size=11, family='Arial', weight='bold')
             )
         
@@ -385,26 +510,9 @@ if menu_opcion == "Facturación":
     # Gráfico de torta: % de facturación por familia
     st.subheader("🥧 Facturación por Familia")
     if 'Codigo' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
-        # Convertir columnas a string para el merge
         df_tickets_temp = df_tickets_filtrado.copy()
         df_consumos_temp = df_consumos.copy()
-        
-        # Limpiar y normalizar columnas
-        df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str).str.strip().str.upper()
-        df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str).str.strip().str.upper()
-        df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str).str.strip().str.upper()
-        df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str).str.strip().str.upper()
-        
-        # Eliminar duplicados en consumos (mismo Codigo+Sucursal, mantener el primero)
-        df_consumos_unique = df_consumos_temp.drop_duplicates(subset=['Codigo', 'Sucursal'], keep='first')
-        
-        # Hacer merge con consumos para obtener la familia (usando Codigo y Sucursal)
-        df_con_familia = df_tickets_temp.merge(
-            df_consumos_unique[['Codigo', 'Familia', 'Sucursal']],
-            left_on=['Codigo', 'Sucursal'],
-            right_on=['Codigo', 'Sucursal'],
-            how='left'
-        )
+        df_con_familia = _agregar_familia(df_tickets_temp, df_consumos_temp)
         
         # Filtrar valores nulos en Familia antes de agrupar
         df_con_familia = df_con_familia.dropna(subset=['Familia'])
@@ -1073,20 +1181,9 @@ elif menu_opcion == "Análisis por Familia":
     st.header("📊 Análisis por Familia")
     
     if 'Codigo' in df_tickets_filtrado.columns and 'Importe' in df_tickets_filtrado.columns:
-        # Hacer merge con consumos para obtener la familia (usando Codigo y Sucursal)
         df_tickets_temp = df_tickets_filtrado.copy()
         df_consumos_temp = df_consumos.copy()
-        df_tickets_temp['Codigo'] = df_tickets_temp['Codigo'].astype(str)
-        df_tickets_temp['Sucursal'] = df_tickets_temp['Sucursal'].astype(str)
-        df_consumos_temp['Codigo'] = df_consumos_temp['Codigo'].astype(str)
-        df_consumos_temp['Sucursal'] = df_consumos_temp['Sucursal'].astype(str)
-        
-        df_con_familia = df_tickets_temp.merge(
-            df_consumos_temp[['Codigo', 'Familia', 'Articulo', 'Sucursal']],
-            left_on=['Codigo', 'Sucursal'],
-            right_on=['Codigo', 'Sucursal'],
-            how='left'
-        )
+        df_con_familia = _agregar_familia(df_tickets_temp, df_consumos_temp)
         
         # Gráfico de torta: % de facturación por familia (fijo)
         st.subheader("💰 Distribución de Facturación por Familia")

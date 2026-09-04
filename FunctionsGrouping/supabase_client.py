@@ -107,18 +107,25 @@ def insert_tickets(client: Client, df: pd.DataFrame):
 
 
 def upsert_consumos(client: Client, df: pd.DataFrame):
-    """Upsert consumos (insert or update fecha_carga) by codigo+sucursal."""
+    """Keep only the latest row per codigo+sucursal and upsert that version."""
     if df.empty:
-        print("   ℹ️ No hay consumos para upsertear")
+        print("   ?? No hay consumos para upsertear")
         return
 
     df = df.rename(columns=CONSUMOS_COLS_TO_SUPABASE)
 
-    for col in ['fecha_carga']:
-        if col in df.columns:
-            df[col] = df[col].astype(str)
+    if 'fecha_carga' in df.columns:
+        df['fecha_carga'] = pd.to_datetime(df['fecha_carga'], errors='coerce')
+        df = df.sort_values(['codigo', 'sucursal', 'fecha_carga'], ascending=[True, True, False])
+        df = df.drop_duplicates(subset=['codigo', 'sucursal'], keep='first')
+        df['fecha_carga'] = df['fecha_carga'].astype(str)
 
-    df = df.drop_duplicates(subset=['codigo', 'articulo', 'sucursal'], keep='last')
+    if {'codigo', 'sucursal'}.issubset(df.columns):
+        dupes = df.duplicated(subset=['codigo', 'sucursal'], keep=False)
+        if dupes.any():
+            df = df[~dupes].copy()
+            print("   ?? Se descartaron duplicados de codigo+sucursal antes del upsert")
+
     records = df.where(pd.notnull(df), None).to_dict(orient='records')
 
     batch_size = 500
@@ -127,13 +134,12 @@ def upsert_consumos(client: Client, df: pd.DataFrame):
         batch = records[i:i + batch_size]
         client.table('consumos').upsert(
             batch,
-            on_conflict='codigo,articulo,sucursal'
+            on_conflict='codigo,sucursal'
         ).execute()
         upserted += len(batch)
-        print(f"   ✓ Upserted {upserted}/{len(records)}")
+        print(f"   ? Upserted {upserted}/{len(records)}")
 
-    print(f"   ✅ {upserted} consumos procesados en Supabase")
-
+    print(f"   ? {upserted} consumos procesados en Supabase")
 
 def _fetch_all_rows(client: Client, table: str, select: str = '*') -> list:
     """Fetch all rows from a Supabase table using pagination to bypass the 1000-row default limit."""

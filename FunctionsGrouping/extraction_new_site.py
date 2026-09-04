@@ -4,6 +4,7 @@ Uses requests + BeautifulSoup instead of Playwright/Selenium.
 Targets Pasadena (id=1) and Junin (id=2).
 """
 import os
+import unicodedata
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
@@ -69,6 +70,40 @@ def _parse_importe(raw: str) -> float:
         return 0.0
 
 
+def _normalize_lookup_key(value: str) -> str:
+    text = unicodedata.normalize('NFKD', str(value))
+    text = ''.join(ch.lower() for ch in text if not unicodedata.combining(ch))
+    return ''.join(ch for ch in text if ch.isalnum())
+
+
+def _find_product_code(value, fallback_idx: int):
+    """Recursively walk nested payloads and return the first plausible product code."""
+    candidates = {
+        'codigoarticulo', 'codigoarticuloproducto', 'codigoproducto', 'codigo', 'idarticulo',
+        'articuloid', 'productoid', 'id', 'codigodearticulo', 'codigodeproducto', 'codigoitem',
+        'articulocodigo', 'productocodigo', 'codigoarticuloitem', 'idproducto'
+    }
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key, item in node.items():
+                norm_key = _normalize_lookup_key(key)
+                if norm_key in candidates and item is not None and str(item).strip() not in ('', 'None', 'nan'):
+                    return str(item).strip()
+                if isinstance(item, (dict, list)):
+                    found = walk(item)
+                    if found is not None:
+                        return found
+        elif isinstance(node, list):
+            for item in node:
+                found = walk(item)
+                if found is not None:
+                    return found
+        return None
+
+    return walk(value)
+
+
 def _fetch_detalle(session: requests.Session, internal_id: str, comanda_meta: dict) -> list:
     """Fetch /Comandas/Detalle/{id} JSON and return list of ticket rows."""
     try:
@@ -88,6 +123,15 @@ def _fetch_detalle(session: requests.Session, internal_id: str, comanda_meta: di
         fecha = None
         hora = None
 
+    def _extract_codigo(item: dict, fallback_idx: int) -> str:
+        """Prefer the real product code from the API payload. If the API does not provide it,
+        return an empty string instead of inventing an index-based code."""
+        value = _find_product_code(item, fallback_idx)
+        if value is None:
+            return ''
+        value = str(value).strip()
+        return value if value not in ('', 'None', 'nan') else ''
+
     rows = []
     for idx, item in enumerate(data.get("detalle", []), start=1):
         rows.append({
@@ -97,10 +141,16 @@ def _fetch_detalle(session: requests.Session, internal_id: str, comanda_meta: di
             "Mesa": str(data.get("numeroMesa", "")),
             "Mozo": data.get("nombreMozo", ""),
             "Nombre": data.get("nombreCliente", ""),
-            "Codigo": str(idx),
-            "Descripcion": item.get("nombreArticulo", ""),
-            "Cantidad": _parse_importe(item.get("cantidad", "0")),
-            "Importe": _parse_importe(item.get("importeTotal", "0")),
+            "Codigo": _extract_codigo(item, idx),
+            "Descripcion": (
+                item.get("nombreArticulo")
+                or item.get("descripcionArticulo")
+                or item.get("articulo")
+                or item.get("descripcion")
+                or ""
+            ),
+            "Cantidad": _parse_importe(str(item.get("cantidad", item.get("cantidadArticulo", "0")))),
+            "Importe": _parse_importe(str(item.get("importeTotal", item.get("importe", "0")))),
             "Turno": comanda_meta.get("Turno"),
             "Fecha": fecha,
             "Hora": hora,
