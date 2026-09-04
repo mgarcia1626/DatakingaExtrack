@@ -105,6 +105,25 @@ def _agregar_familia(df_tickets, df_consumos):
     merged = merged.drop(columns=['Descripcion_match', 'Sucursal_match', 'Familia_desc'], errors='ignore')
     return merged
 
+def _format_table(df, *, currency_cols=None, percent_cols=None, int_cols=None):
+    """Keep numeric columns numeric for sorting, and format only the display layer."""
+    display = df.copy()
+    formatters = {}
+
+    for col in currency_cols or []:
+        if col in display.columns:
+            formatters[col] = "${:,.2f}".format
+    for col in percent_cols or []:
+        if col in display.columns:
+            formatters[col] = "{:.2f}%".format
+    for col in int_cols or []:
+        if col in display.columns:
+            formatters[col] = "{:,.0f}".format
+
+    if not formatters:
+        return display
+    return display.style.format(formatters)
+
 # Configuración de la página
 st.set_page_config(
     page_title="DataKinga Dashboard",
@@ -551,8 +570,6 @@ if menu_opcion == "Facturación":
         
         # Mostrar tabla de resumen con formato
         tabla_familia = facturacion_familia[['Familia', 'Importe', 'Porcentaje']].copy()
-        tabla_familia['Importe'] = tabla_familia['Importe'].apply(lambda x: f"${x:,.2f}")
-        tabla_familia['Porcentaje'] = tabla_familia['Porcentaje'].apply(lambda x: f"{x:.2f}%")
         tabla_familia = tabla_familia.rename(
             columns={'Importe': 'Facturación ($)', 'Porcentaje': '% del Total'}
         )
@@ -568,7 +585,11 @@ if menu_opcion == "Facturación":
         """, unsafe_allow_html=True)
         
         st.dataframe(
-            tabla_familia,
+            _format_table(
+                tabla_familia,
+                currency_cols=['Facturación ($)'],
+                percent_cols=['% del Total']
+            ),
             use_container_width=True,
             hide_index=True
         )
@@ -1304,13 +1325,11 @@ elif menu_opcion == "Análisis por Familia":
                 # Ordenar por facturación descendente
                 productos_completos = productos_completos.sort_values('Importe_Total', ascending=False)
                 
-                # Formatear valores como en la tabla de facturación
+                # Formatear valores solo en la capa visual; mantener los números como numeric para ordenar bien
                 tabla_display = productos_completos[['Descripcion', 'Cantidad', 'Importe_Total', '% Facturación']].copy()
-                tabla_display['Cantidad'] = tabla_display['Cantidad'].apply(lambda x: f"{x:,.0f}")
-                tabla_display['Importe_Total'] = tabla_display['Importe_Total'].apply(lambda x: f"${x:,.2f}")
-                tabla_display['% Facturación'] = tabla_display['% Facturación'].apply(lambda x: f"{x:.2f}%")
                 tabla_display = tabla_display.rename(
                     columns={
+                        'Descripcion': 'Producto',
                         'Cantidad': 'Cantidad Vendida',
                         'Importe_Total': 'Facturación ($)',
                         '% Facturación': '% facturado sobre total de la familia'
@@ -1329,7 +1348,12 @@ elif menu_opcion == "Análisis por Familia":
                 
                 # Mostrar tabla completa
                 st.dataframe(
-                    tabla_display,
+                    _format_table(
+                        tabla_display,
+                        currency_cols=['Facturación ($)'],
+                        percent_cols=['% facturado sobre total de la familia'],
+                        int_cols=['Cantidad Vendida']
+                    ),
                     use_container_width=True,
                     hide_index=True,
                     height=600
@@ -1387,10 +1411,6 @@ elif menu_opcion == "Ranking de productos":
         if buscar_producto:
             tabla_ranking = tabla_ranking[tabla_ranking['Descripcion'].str.contains(buscar_producto, case=False, na=False)]
         
-        tabla_ranking['Cantidad'] = tabla_ranking['Cantidad'].apply(lambda x: f"{x:,.0f}")
-        tabla_ranking['Importe_Total'] = tabla_ranking['Importe_Total'].apply(lambda x: f"${x:,.2f}")
-        tabla_ranking['% Facturación'] = tabla_ranking['% Facturación'].apply(lambda x: f"{x:.2f}%")
-        
         tabla_ranking = tabla_ranking.rename(columns={
             'Ranking': '#',
             'Descripcion': 'Producto',
@@ -1412,7 +1432,12 @@ elif menu_opcion == "Ranking de productos":
         # Mostrar tabla completa
         if len(tabla_ranking) > 0:
             st.dataframe(
-                tabla_ranking,
+                _format_table(
+                    tabla_ranking,
+                    currency_cols=['Facturación Total'],
+                    percent_cols=['% del Total'],
+                    int_cols=['Cantidad Vendida']
+                ),
                 use_container_width=True,
                 hide_index=True,
                 height=600
@@ -1482,11 +1507,9 @@ elif menu_opcion == "Creación de Combos":
                     
                     # Top más vendidos
                     top_mas = productos_familia.head(cantidad_top).copy()
-                    top_mas['Cantidad'] = top_mas['Cantidad'].apply(lambda x: f"{x:,.0f}")
                     
                     # Top menos vendidos
                     top_menos = productos_familia.tail(cantidad_top).sort_values('Cantidad', ascending=True).copy()
-                    top_menos['Cantidad'] = top_menos['Cantidad'].apply(lambda x: f"{x:,.0f}")
                     
                     # Mostrar ambas tablas en columnas
                     col1, col2 = st.columns(2)
@@ -1494,7 +1517,10 @@ elif menu_opcion == "Creación de Combos":
                     with col1:
                         st.markdown(f"**✅ Top {cantidad_top} Más Vendidos**")
                         st.dataframe(
-                            top_mas.rename(columns={'Descripcion': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
+                            _format_table(
+                                top_mas.rename(columns={'Descripcion': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
+                                int_cols=['Cantidad Vendida']
+                            ),
                             use_container_width=True,
                             hide_index=True
                         )
@@ -1502,7 +1528,10 @@ elif menu_opcion == "Creación de Combos":
                     with col2:
                         st.markdown(f"**⚠️ Top {cantidad_top} Menos Vendidos**")
                         st.dataframe(
-                            top_menos.rename(columns={'Descripcion': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
+                            _format_table(
+                                top_menos.rename(columns={'Descripcion': 'Producto', 'Cantidad': 'Cantidad Vendida'}),
+                                int_cols=['Cantidad Vendida']
+                            ),
                             use_container_width=True,
                             hide_index=True
                         )
@@ -1598,10 +1627,8 @@ elif menu_opcion == "Análisis de regalos":
                 
                 st.markdown("---")
                 
-                # Formatear tabla
+                # Formatear tabla solo en la capa visual; mantener los valores numéricos para ordenar
                 tabla_productos = resumen_productos.copy()
-                tabla_productos['Cantidad'] = tabla_productos['Cantidad'].apply(lambda x: f"{x:,.0f}")
-                tabla_productos['Importe_Total'] = tabla_productos['Importe_Total'].apply(lambda x: f"${x:,.2f}")
                 
                 tabla_productos = tabla_productos.rename(columns={
                     'Descripcion': 'Producto',
@@ -1612,7 +1639,11 @@ elif menu_opcion == "Análisis de regalos":
                 # Mostrar tabla
                 st.subheader("📋 Productos vendidos en tickets con el regalo")
                 st.dataframe(
-                    tabla_productos,
+                    _format_table(
+                        tabla_productos,
+                        currency_cols=['Facturación en estos Tickets'],
+                        int_cols=['Cantidad Vendida']
+                    ),
                     use_container_width=True,
                     hide_index=True,
                     height=500
