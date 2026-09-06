@@ -1545,10 +1545,14 @@ elif menu_opcion == "Análisis de regalos":
                 cantidad_regalo = resumen_productos[
                     resumen_productos['Descripcion'] == producto_regalo_seleccionado
                 ]['Cantidad'].sum()
+                promedio_valor_ticket = (
+                    facturacion_total_tickets / len(tickets_con_regalo)
+                    if len(tickets_con_regalo) > 0 else 0.0
+                )
                 costo_total = cantidad_regalo * costo_unitario
                 
                 # Mostrar métricas
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3, col4, col5 = st.columns(5)
                 with col1:
                     st.metric("Tickets con el producto", f"{len(tickets_con_regalo):,}")
                 with col2:
@@ -1559,6 +1563,8 @@ elif menu_opcion == "Análisis de regalos":
                         f"${facturacion_total_tickets:,.2f}"
                     )
                 with col4:
+                    st.metric("Promedio valor ticket", f"${promedio_valor_ticket:,.2f}")
+                with col5:
                     st.metric("Costo total", f"${costo_total:,.2f}")
                 
                 st.markdown("---")
