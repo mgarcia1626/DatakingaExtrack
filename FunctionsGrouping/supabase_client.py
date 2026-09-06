@@ -45,6 +45,13 @@ CONSUMOS_COLS_TO_SUPABASE = {
 CONSUMOS_COLS_FROM_SUPABASE = {v: k for k, v in CONSUMOS_COLS_TO_SUPABASE.items()}
 
 
+def _sanitize_df_for_json(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert NaN/NaT/inf to None so httpx JSON encoding won't fail."""
+    clean = df.replace([float('inf'), float('-inf')], pd.NA)
+    clean = clean.astype(object).where(pd.notnull(clean), None)
+    return clean
+
+
 def get_client() -> Client:
     url = os.getenv('SUPABASE_URL')
     key = os.getenv('SUPABASE_KEY')
@@ -71,15 +78,13 @@ def insert_tickets(client: Client, df: pd.DataFrame):
     # Normalize accented column names to ASCII
     df = df.rename(columns=TICKETS_NORMALIZE)
 
-    # Get existing keys to avoid duplicates
-    existing_keys = get_existing_ticket_keys(client)
-    df['_key'] = df['Numero'].astype(str) + '|' + df['Codigo'].astype(str)
-    df_new = df[~df['_key'].isin(existing_keys)].drop(columns=['_key'])
+    # Always upsert the full batch; partial key prefetch can skip required updates.
+    df_new = df.copy()
 
-    print(f"   Tickets a insertar: {len(df_new)} (de {len(df)} totales)")
+    print(f"   Tickets a procesar por upsert: {len(df_new)}")
 
     if df_new.empty:
-        print("   ℹ️ Todos son duplicados")
+        print("   ℹ️ No hay tickets para procesar")
         return
 
     # Rename to supabase column names
@@ -92,7 +97,7 @@ def insert_tickets(client: Client, df: pd.DataFrame):
 
     # Drop duplicates within the batch (same numero+codigo) to avoid ON CONFLICT update conflict
     df_new = df_new.drop_duplicates(subset=['numero', 'codigo'], keep='last')
-    records = df_new.where(pd.notnull(df_new), None).to_dict(orient='records')
+    records = _sanitize_df_for_json(df_new).to_dict(orient='records')
 
     # Insert in batches of 500
     batch_size = 500
@@ -107,26 +112,24 @@ def insert_tickets(client: Client, df: pd.DataFrame):
 
 
 def upsert_consumos(client: Client, df: pd.DataFrame):
-    """Keep only the latest row per codigo+sucursal and upsert that version."""
+    """Upsert consumos rows keyed by codigo+articulo+sucursal."""
     if df.empty:
-        print("   ?? No hay consumos para upsertear")
+        print("   ℹ️ No hay consumos para upsertear")
         return
 
     df = df.rename(columns=CONSUMOS_COLS_TO_SUPABASE)
 
-    if 'fecha_carga' in df.columns:
-        df['fecha_carga'] = pd.to_datetime(df['fecha_carga'], errors='coerce')
-        df = df.sort_values(['codigo', 'sucursal', 'fecha_carga'], ascending=[True, True, False])
-        df = df.drop_duplicates(subset=['codigo', 'sucursal'], keep='first')
-        df['fecha_carga'] = df['fecha_carga'].astype(str)
+    if {'codigo', 'articulo', 'sucursal'}.issubset(df.columns):
+        # Keep latest fecha_carga per unique key when available.
+        if 'fecha_carga' in df.columns:
+            df['fecha_carga'] = pd.to_datetime(df['fecha_carga'], errors='coerce')
+            df = df.sort_values(['codigo', 'articulo', 'sucursal', 'fecha_carga'], ascending=[True, True, True, False])
+            df = df.drop_duplicates(subset=['codigo', 'articulo', 'sucursal'], keep='first')
+            df['fecha_carga'] = df['fecha_carga'].astype(str)
+        else:
+            df = df.drop_duplicates(subset=['codigo', 'articulo', 'sucursal'], keep='last')
 
-    if {'codigo', 'sucursal'}.issubset(df.columns):
-        dupes = df.duplicated(subset=['codigo', 'sucursal'], keep=False)
-        if dupes.any():
-            df = df[~dupes].copy()
-            print("   ?? Se descartaron duplicados de codigo+sucursal antes del upsert")
-
-    records = df.where(pd.notnull(df), None).to_dict(orient='records')
+    records = _sanitize_df_for_json(df).to_dict(orient='records')
 
     batch_size = 500
     upserted = 0
@@ -134,12 +137,13 @@ def upsert_consumos(client: Client, df: pd.DataFrame):
         batch = records[i:i + batch_size]
         client.table('consumos').upsert(
             batch,
-            on_conflict='codigo,sucursal'
+            on_conflict='codigo,articulo,sucursal'
         ).execute()
         upserted += len(batch)
-        print(f"   ? Upserted {upserted}/{len(records)}")
+        print(f"   ✓ Upserted {upserted}/{len(records)}")
 
-    print(f"   ? {upserted} consumos procesados en Supabase")
+    print(f"   ✅ {upserted} consumos procesados en Supabase")
+
 
 def _fetch_all_rows(client: Client, table: str, select: str = '*') -> list:
     """Fetch all rows from a Supabase table using pagination to bypass the 1000-row default limit."""
@@ -181,7 +185,7 @@ def fetch_tickets(client: Client) -> pd.DataFrame:
 
 
 def fetch_consumos(client: Client) -> pd.DataFrame:
-    """Fetch consumos from Supabase (latest fecha_carga per codigo+sucursal)."""
+    """Fetch consumos from Supabase (latest fecha_carga per codigo+sucursal for dashboard use)."""
     data = _fetch_all_rows(client, 'consumos')
     df = pd.DataFrame(data)
     if df.empty:
@@ -193,8 +197,9 @@ def fetch_consumos(client: Client) -> pd.DataFrame:
         'sucursal': 'Sucursal',
         'fecha_carga': 'Fecha_Carga',
     })
-    # Keep only the latest Fecha_Carga per Codigo+Sucursal
+    # Keep only the latest Fecha_Carga per Codigo+Sucursal for matching convenience.
     if 'Fecha_Carga' in df.columns:
         df = df.sort_values('Fecha_Carga', ascending=False)
         df = df.drop_duplicates(subset=['Codigo', 'Sucursal'], keep='first')
     return df
+

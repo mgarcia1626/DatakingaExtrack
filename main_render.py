@@ -9,7 +9,6 @@ Uso:
 """
 import os
 import sys
-import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
@@ -17,12 +16,14 @@ from FunctionsGrouping.extraction_new_site import (
     login,
     extraer_tickets,
     extraer_consumos,
+    SUCURSALES,
 )
 from FunctionsGrouping.supabase_client import (
     get_client,
     insert_tickets,
     upsert_consumos,
 )
+from FunctionsGrouping.audit_pre_supabase import run_pre_supabase_audit, print_audit_report
 
 load_dotenv()
 
@@ -94,6 +95,21 @@ def main():
             print(f"\nERROR en bloque {chunk_idx}: {e}")
             traceback.print_exc()
             print("Continuando con el siguiente bloque...")
+            continue
+
+        print("\n--- AUDITORIA PRE-SUPABASE ---")
+        expected_sucursales = list(SUCURSALES.keys())
+        audit = run_pre_supabase_audit(
+            df_tickets,
+            df_consumos,
+            expected_sucursales=expected_sucursales,
+        )
+        print_audit_report(audit)
+
+        strict_audit = os.getenv("AUDIT_STRICT", "1").strip().lower() not in {"0", "false", "no"}
+        if strict_audit and not audit.get("ok", False):
+            print("\nERROR: auditoria fallida. Bloque cancelado, no se sube a Supabase.")
+            print("Tip: revisa EXPECTED_SUCURSALES o corrige datos antes de reintentar.")
             continue
 
         print("\n--- GUARDANDO EN SUPABASE ---")

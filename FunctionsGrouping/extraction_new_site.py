@@ -1,4 +1,4 @@
-"""
+﻿"""
 DATAKINGA (new site: datakinga.cloudsysbar.com) - Extraction functions
 Uses requests + BeautifulSoup instead of Playwright/Selenium.
 Targets Pasadena (id=1) and Junin (id=2).
@@ -123,17 +123,43 @@ def _fetch_detalle(session: requests.Session, internal_id: str, comanda_meta: di
         fecha = None
         hora = None
 
-    def _extract_codigo(item: dict, fallback_idx: int) -> str:
-        """Prefer the real product code from the API payload. If the API does not provide it,
-        return an empty string instead of inventing an index-based code."""
+    def _fallback_codigo(descripcion: str, fallback_idx: int) -> str:
+        # Stable synthetic key per line when API omits product code.
+        # Keeps audit strict while avoiding silent line merges.
+        norm = _normalize_lookup_key(descripcion)
+        token = norm[:24] if norm else "item"
+        return f"NC_{fallback_idx}_{token}"
+
+    def _extract_codigo(item: dict, descripcion: str, fallback_idx: int) -> str:
         value = _find_product_code(item, fallback_idx)
         if value is None:
-            return ''
+            return _fallback_codigo(descripcion, fallback_idx)
         value = str(value).strip()
-        return value if value not in ('', 'None', 'nan') else ''
+        if value in ("", "None", "nan"):
+            return _fallback_codigo(descripcion, fallback_idx)
+        return value
 
+
+    def _line_importe_unit(item: dict) -> float:
+        cantidad = _parse_importe(str(item.get("cantidad", item.get("cantidadArticulo", "0"))))
+        imp_unit = _parse_importe(str(item.get("importeUnitario", "")))
+        imp_total = _parse_importe(str(item.get("importeTotal", item.get("importe", "0"))))
+        if imp_unit > 0:
+            return imp_unit
+        if cantidad > 0 and imp_total > 0:
+            return imp_total / cantidad
+        return imp_total
     rows = []
     for idx, item in enumerate(data.get("detalle", []), start=1):
+        descripcion = (
+            item.get("nombreArticulo")
+            or item.get("descripcionArticulo")
+            or item.get("articulo")
+            or item.get("descripcion")
+            or ""
+        )
+        cantidad = _parse_importe(str(item.get("cantidad", item.get("cantidadArticulo", "0"))))
+        unit_importe = _line_importe_unit(item)
         rows.append({
             "Numero": str(data["numComanda"]),
             "Tipo": comanda_meta["Tipo"],
@@ -141,23 +167,24 @@ def _fetch_detalle(session: requests.Session, internal_id: str, comanda_meta: di
             "Mesa": str(data.get("numeroMesa", "")),
             "Mozo": data.get("nombreMozo", ""),
             "Nombre": data.get("nombreCliente", ""),
-            "Codigo": _extract_codigo(item, idx),
-            "Descripcion": (
-                item.get("nombreArticulo")
-                or item.get("descripcionArticulo")
-                or item.get("articulo")
-                or item.get("descripcion")
-                or ""
-            ),
-            "Cantidad": _parse_importe(str(item.get("cantidad", item.get("cantidadArticulo", "0")))),
-            "Importe": _parse_importe(str(item.get("importeTotal", item.get("importe", "0")))),
+            "Codigo": _extract_codigo(item, descripcion, idx),
+            "Descripcion": descripcion,
+            "Cantidad": cantidad,
+            "Importe": unit_importe,
             "Turno": comanda_meta.get("Turno"),
             "Fecha": fecha,
             "Hora": hora,
         })
+
+    # Normalize line totals to match ticket final total (after discounts/adjustments)
+    comanda_total = _parse_importe(str(data.get("importeTotal", "0")))
+    subtotal_lines = sum((r["Cantidad"] or 0) * (r["Importe"] or 0) for r in rows)
+    if comanda_total > 0 and subtotal_lines > 0:
+        factor = comanda_total / subtotal_lines
+        for r in rows:
+            r["Importe"] = (r["Importe"] or 0) * factor
+
     return rows
-
-
 def _build_turno_map(session: requests.Session, sucursal_id: int, desde: datetime, hasta: datetime) -> dict:
     """Returns {internal_id: turno_label} for all comandas of a sucursal.
     Queries day-by-day to avoid server-side table pagination truncation."""
@@ -377,3 +404,10 @@ def extraer_consumos(session: requests.Session, desde: datetime, hasta: datetime
     result = pd.concat(frames, ignore_index=True)
     print(f"\n   v Total consumos: {len(result)}")
     return result
+
+
+
+
+
+
+

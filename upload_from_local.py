@@ -20,6 +20,7 @@ load_dotenv()
 
 # Importar funciones de Supabase y procesado
 from FunctionsGrouping.supabase_client import get_client, insert_tickets, upsert_consumos
+from FunctionsGrouping.audit_pre_supabase import run_pre_supabase_audit, print_audit_report
 
 DRY_RUN = "--dry-run" in sys.argv
 
@@ -172,14 +173,23 @@ def main():
     if DRY_RUN:
         print("** DRY RUN - no se subira nada **")
 
-    print("\n[1/3] Procesando Tickets...")
+    print("\n[1/4] Procesando Tickets...")
     df_tickets = procesar_tickets("DataBase/Detalle", "DataBase/Cinta")
 
-    print("\n[2/3] Procesando Consumos...")
+    print("\n[2/4] Procesando Consumos...")
     df_consumos = procesar_consumos("DataBase/Consumos")
 
+    print("\n[3/4] Auditoria pre-Supabase...")
+    audit = run_pre_supabase_audit(df_tickets, df_consumos)
+    print_audit_report(audit)
+
+    strict_audit = os.getenv("AUDIT_STRICT", "1").strip().lower() not in {"0", "false", "no"}
+    if strict_audit and not audit.get("ok", False):
+        print("\nERROR: auditoria fallida. Carga cancelada, no se suben datos a Supabase.")
+        return 1
+
     if not DRY_RUN:
-        print("\n[3/3] Subiendo a Supabase...")
+        print("\n[4/4] Subiendo a Supabase...")
         supabase = get_client()
         if not df_tickets.empty:
             insert_tickets(supabase, df_tickets)
@@ -190,6 +200,8 @@ def main():
         print(f"\n[DRY RUN] Tickets listos para subir: {len(df_tickets)}")
         print(f"[DRY RUN] Consumos listos para subir: {len(df_consumos)}")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
