@@ -2746,6 +2746,35 @@ elif menu_opcion == "Negocio sin regalos":
                 st.metric("Cubiertos mediana (sin comida)", f"{metricas_tickets_negocio['cubiertos_mediana_sin_comida']:,.2f}")
 
             st.markdown("-------------")
+            st.subheader("Numero de cubiertos por ticket (mesa)")
+            st.caption("Cantidad de tickets (mesas) segun la cantidad de cubiertos que tienen. Solo se incluyen tickets con cubiertos registrados (mayor a 0). Los valores de 10 cubiertos o mas se agrupan en la categoria '10+'.")
+
+            df_distribucion_cubiertos_negocio = _calcular_distribucion_cubiertos_por_ticket(df_tickets_sin_producto, df_consumos)
+
+            if df_distribucion_cubiertos_negocio.empty:
+                st.info("No hay datos de cubiertos para graficar.")
+            else:
+                fig_distribucion_cubiertos_negocio = px.bar(
+                    df_distribucion_cubiertos_negocio,
+                    x='Cubiertos_Label',
+                    y='Cantidad de tickets',
+                    title='Numero de Cubiertos por Ticket (Mesa)',
+                    labels={'Cubiertos_Label': 'Cantidad de cubiertos', 'Cantidad de tickets': 'Cantidad de tickets'},
+                    color='Cantidad de tickets',
+                    color_continuous_scale='Blues',
+                    text='Cantidad de tickets'
+                )
+                fig_distribucion_cubiertos_negocio.update_traces(textposition='outside')
+                fig_distribucion_cubiertos_negocio.update_layout(xaxis_type='category', showlegend=False)
+                st.plotly_chart(fig_distribucion_cubiertos_negocio, use_container_width=True)
+
+                st.dataframe(
+                    df_distribucion_cubiertos_negocio[['Cubiertos_Label', 'Cantidad de tickets']].rename(columns={'Cubiertos_Label': 'Cubiertos'}),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            st.markdown("-------------")
             st.subheader("Evolucion diaria de la facturacion por cubierto")
             st.caption("Evolucion diaria de la facturacion por cubierto (total, comida y sin comida), calculada sobre el periodo y filtros actualmente seleccionados en el panel lateral (sucursal, rango de fechas y turno).")
 
