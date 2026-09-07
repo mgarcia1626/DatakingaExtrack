@@ -79,22 +79,32 @@ Cuando ejecutas en modo `--schedule`, el script se mantiene corriendo continuame
 
 ## Estructura del Proyecto
 
-- `main_dashboard.py` - Dashboard interactivo con Streamlit
-- `main.py` - Script de extracciÃ³n manual
-- `main_database_incremental.py` - ActualizaciÃ³n incremental de la BD
-- `DataBase/datakinga.db` - Base de datos SQLite
-- `FunctionsGrouping/` - MÃ³dulos de funciones
+Comandos de uso externo (compatibilidad):
+- `main_dashboard.py` - Wrapper compatible para Streamlit
+- `main_render.py` - Wrapper compatible para extracción en Render cron
+- `main.py` - Wrapper compatible para extracción manual
+- `main_database_incremental.py` - Wrapper compatible para actualización incremental
+- `run_daily_update.py` - Wrapper compatible para ejecución diaria/scheduler
 
-## Uso ProgramÃ¡tico
+Nueva estructura interna (`src/`):
+- `src/datakinga/apps/dashboard/streamlit_app.py` - App de dashboard
+- `src/datakinga/apps/pipelines/extract_pipeline.py` - Pipeline de extracción legacy
+- `src/datakinga/apps/pipelines/render_pipeline.py` - Pipeline de extracción para Render
+- `src/datakinga/apps/pipelines/incremental_db_pipeline.py` - Pipeline incremental SQLite
+- `src/datakinga/apps/scheduler/daily_update_runner.py` - Orquestador diario
+- `src/datakinga/apps/tools/` - Utilidades operativas (rebuild/upload)
+- `src/datakinga/core/` - Módulos reutilizables (auth, extractors, storage, audit)
+
+Compatibilidad de imports:
+- `FunctionsGrouping/` se mantiene como shim para no romper imports históricos.
+- El runtime de datos sigue en `DataBase/` durante esta fase.
+## Uso Programático
 
 ```python
-from main import login, get_page_html
+from datakinga.core.extractors.new_site_extraction import login
 
-# Login
+# Login al nuevo sitio
 session = login()
-
-# Obtener HTML
-html = get_page_html(session, "https://datakinga.com/pagina.aspx")
 ```
 
 ## Rebuild Total (Desde Cero) + Auditoria
@@ -128,3 +138,6 @@ python rebuild_from_zero.py 01/01/2026 06/09/2026 --expected-sucursales "COSTAVE
 Variables de entorno:
 - `AUDIT_STRICT=1` (default): bloquea la subida si falla auditoria
 - `EXPECTED_SUCURSALES`: cobertura esperada para validar que se extrajo todo
+
+
+
