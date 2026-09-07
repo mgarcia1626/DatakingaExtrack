@@ -14,6 +14,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 from datakinga.core.storage.supabase_client import get_client, fetch_tickets, fetch_consumos
+from datakinga.apps.pipelines.render_pipeline import run_extraction
 
 # Cargar variables de entorno
 load_dotenv()
@@ -608,6 +609,23 @@ last_run_status = os.getenv('LAST_RUN_STATUS', '')
 if last_run_time:
     status_icon = "OK" if last_run_status == "SUCCESS" else "X"
     st.sidebar.caption(f"Ultima actualizacion: {last_run_time} {status_icon}")
+
+if st.sidebar.button("Actualizar datos ahora", key="btn_force_update", help="Ejecuta una extraccion manual y actualiza la base de datos"):
+    with st.spinner("Actualizando datos... esto puede tardar unos minutos"):
+        resultado_update = run_extraction()
+
+    if resultado_update["success"]:
+        st.sidebar.success(resultado_update["message"])
+        if resultado_update["errors"]:
+            for error_msg in resultado_update["errors"]:
+                st.sidebar.warning(error_msg)
+        cargar_datos.clear()
+        st.rerun()
+    else:
+        st.sidebar.error(resultado_update["message"])
+        if resultado_update["errors"]:
+            for error_msg in resultado_update["errors"]:
+                st.sidebar.warning(error_msg)
 
 # Menu de navegacion
 st.sidebar.markdown("-------------")
