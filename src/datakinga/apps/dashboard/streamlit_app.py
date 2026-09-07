@@ -635,6 +635,7 @@ if st.sidebar.button("Actualizar datos ahora", key="btn_force_update", help="Eje
                 st.sidebar.warning(error_msg)
         st.session_state.pop("fecha_desde_2", None)
         st.session_state.pop("fecha_hasta_2", None)
+        st.session_state.pop("resumen_dia_fecha", None)
         cargar_datos.clear()
         st.rerun()
     else:
@@ -649,6 +650,7 @@ st.sidebar.header("Menu")
 
 # UN SOLO radio button con todas las opciones y separadores
 opciones_menu = [
+    "Resumen del dia",
     "Facturacion",
     "Analisis por Familia",
     "-------------",
@@ -666,6 +668,7 @@ opciones_menu = [
     "Creacion de Combos",
     "-------------",
     "Analisis de tickets",
+    "Negocio sin regalos",
     "Analisis de regalos"
 ]
 
@@ -694,8 +697,348 @@ else:
     menu_opcion = menu_opcion_temp
     st.session_state.menu_seleccion = menu_opcion
 
+# ========== VISTA: RESUMEN DEL DIA ==========
+if menu_opcion == "Resumen del dia":
+    st.header("Resumen del dia")
+
+    df_sucursal_completo = df_tickets[df_tickets['Sucursal'] == sucursal_seleccionada].copy() if 'Sucursal' in df_tickets.columns else df_tickets.copy()
+
+    if 'Fecha' in df_sucursal_completo.columns and not df_sucursal_completo.empty:
+        df_sucursal_completo['Fecha_dt'] = pd.to_datetime(df_sucursal_completo['Fecha'])
+        fecha_min_dia = df_sucursal_completo['Fecha_dt'].min().date()
+        fecha_max_dia = df_sucursal_completo['Fecha_dt'].max().date()
+
+        if "resumen_dia_fecha" in st.session_state:
+            valor_previo = st.session_state["resumen_dia_fecha"]
+            if valor_previo < fecha_min_dia or valor_previo > fecha_max_dia:
+                st.session_state["resumen_dia_fecha"] = fecha_max_dia
+
+        dia_seleccionado = st.date_input(
+            "Dia a mostrar",
+            value=fecha_max_dia,
+            min_value=fecha_min_dia,
+            max_value=fecha_max_dia,
+            key="resumen_dia_fecha"
+        )
+
+        df_dia = df_sucursal_completo[df_sucursal_completo['Fecha_dt'].dt.date == dia_seleccionado].copy()
+        st.caption(f"Mostrando datos del dia {dia_seleccionado.strftime('%d/%m/%Y')} para {sucursal_seleccionada}. Este resumen ignora el filtro de rango de fechas y turno del panel lateral (usa el selector de dia de arriba).")
+    else:
+        df_dia = df_sucursal_completo.copy()
+        st.warning("No hay datos de fecha disponibles para esta sucursal.")
+
+    if df_dia.empty:
+        st.warning("No hay datos disponibles para el ultimo dia.")
+    else:
+        # --- Grafico de torta: Facturacion por turno ---
+        st.subheader("Facturacion por Turno")
+        if 'Turno' in df_dia.columns and 'Cantidad' in df_dia.columns and 'Importe' in df_dia.columns:
+            df_dia_turno = df_dia.copy()
+            df_dia_turno['Importe_Total'] = df_dia_turno['Cantidad'] * df_dia_turno['Importe']
+
+            facturacion_turno = df_dia_turno.groupby('Turno')['Importe_Total'].sum().reset_index()
+            facturacion_turno = facturacion_turno.rename(columns={'Importe_Total': 'Importe'})
+            facturacion_turno = facturacion_turno.sort_values('Importe', ascending=False)
+
+            total_dia = facturacion_turno['Importe'].sum()
+            facturacion_turno['Porcentaje'] = (facturacion_turno['Importe'] / total_dia * 100).round(2)
+
+            facturacion_turno['Turno_Label'] = facturacion_turno.apply(
+                lambda row: f"{row['Turno']} ({row['Porcentaje']:.1f}%)", axis=1
+            )
+            facturacion_turno['Slice_Label'] = facturacion_turno.apply(
+                lambda row: f"{row['Turno']}<br>${row['Importe']:,.2f}", axis=1
+            )
+
+            fig_torta_turno = px.pie(
+                facturacion_turno,
+                values='Importe',
+                names='Turno_Label',
+                title='Distribucion de Facturacion por Turno',
+                hole=0.4,
+                custom_data=['Turno']
+            )
+            fig_torta_turno.update_traces(
+                textposition='inside',
+                text=facturacion_turno['Slice_Label'],
+                hovertemplate='<b>%{customdata[0]}</b><br>Facturacion: $%{value:,.2f}<extra></extra>'
+            )
+            st.plotly_chart(fig_torta_turno, use_container_width=True)
+
+            st.metric("Facturacion Total del Dia", f"${total_dia:,.2f}")
+
+            tabla_turno = facturacion_turno[['Turno', 'Importe', 'Porcentaje']].copy()
+            tabla_turno = tabla_turno.rename(
+                columns={'Importe': 'Facturacion ($)', 'Porcentaje': '% del Total'}
+            )
+            st.dataframe(
+                _format_table(
+                    tabla_turno,
+                    currency_cols=['Facturacion ($)'],
+                    percent_cols=['% del Total']
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.warning("No hay datos de facturacion por turno disponibles")
+
+        st.markdown("-------------")
+
+        # --- Grafico de torta: Facturacion por familia ---
+        st.subheader("Facturacion por Familia")
+        if 'Codigo' in df_dia.columns and 'Importe' in df_dia.columns:
+            df_dia_temp = df_dia.copy()
+            df_consumos_temp = df_consumos.copy()
+            df_con_familia = _agregar_familia(df_dia_temp, df_consumos_temp)
+
+            df_con_familia = df_con_familia.dropna(subset=['Familia'])
+            df_con_familia['Importe_Total'] = df_con_familia['Cantidad'] * df_con_familia['Importe']
+
+            facturacion_familia_dia = df_con_familia.groupby('Familia')['Importe_Total'].sum().reset_index()
+            facturacion_familia_dia = facturacion_familia_dia.rename(columns={'Importe_Total': 'Importe'})
+            facturacion_familia_dia = facturacion_familia_dia.sort_values('Importe', ascending=False)
+
+            total_familia_dia = facturacion_familia_dia['Importe'].sum()
+            facturacion_familia_dia['Porcentaje'] = (facturacion_familia_dia['Importe'] / total_familia_dia * 100).round(2)
+
+            facturacion_familia_dia['Familia_Label'] = facturacion_familia_dia.apply(
+                lambda row: f"{row['Familia']} ({row['Porcentaje']:.1f}%)", axis=1
+            )
+
+            fig_torta_familia_dia = px.pie(
+                facturacion_familia_dia,
+                values='Importe',
+                names='Familia_Label',
+                title='Distribucion de Facturacion por Familia',
+                hole=0.4,
+                custom_data=['Familia']
+            )
+            fig_torta_familia_dia.update_traces(
+                textposition='inside',
+                text=facturacion_familia_dia['Familia'],
+                hovertemplate='<b>%{customdata[0]}</b><br>Facturacion: $%{value:,.2f}<extra></extra>'
+            )
+            st.plotly_chart(fig_torta_familia_dia, use_container_width=True)
+
+            tabla_familia_dia = facturacion_familia_dia[['Familia', 'Importe', 'Porcentaje']].copy()
+            tabla_familia_dia = tabla_familia_dia.rename(
+                columns={'Importe': 'Facturacion ($)', 'Porcentaje': '% del Total'}
+            )
+            st.dataframe(
+                _format_table(
+                    tabla_familia_dia,
+                    currency_cols=['Facturacion ($)'],
+                    percent_cols=['% del Total']
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.warning("No hay datos de codigo para vincular con familias")
+
+        st.markdown("-------------")
+
+        # --- Ranking: Top 15 productos mas vendidos (cantidad) ---
+        st.subheader("Top 15 Productos Mas Vendidos (Cantidad)")
+        if 'Descripcion' in df_dia.columns and 'Cantidad' in df_dia.columns:
+            top_cantidad_dia = df_dia.groupby('Descripcion')['Cantidad'].sum().reset_index()
+            top_cantidad_dia = top_cantidad_dia.sort_values('Cantidad', ascending=False).head(15)
+
+            col1, col2 = st.columns([2, 1])
+
+            with col1:
+                fig_top_cantidad_dia = px.bar(
+                    top_cantidad_dia,
+                    x='Cantidad',
+                    y='Descripcion',
+                    orientation='h',
+                    title='Top 15 Productos Mas Vendidos',
+                    color='Cantidad',
+                    color_continuous_scale='Viridis'
+                )
+                st.plotly_chart(fig_top_cantidad_dia, use_container_width=True)
+
+            with col2:
+                st.dataframe(
+                    top_cantidad_dia,
+                    use_container_width=True,
+                    hide_index=True
+                )
+        else:
+            st.warning("No hay columna Descripcion en los datos")
+
+        st.markdown("-------------")
+
+        # --- Ranking: Top 15 productos por facturacion ---
+        st.subheader("Top 15 Productos con Mayor Facturacion")
+        if 'Descripcion' in df_dia.columns and 'Importe' in df_dia.columns and 'Cantidad' in df_dia.columns:
+            df_temp_dia = df_dia.copy()
+            df_temp_dia['Importe_Total'] = df_temp_dia['Cantidad'] * df_temp_dia['Importe']
+
+            top_facturacion_dia = df_temp_dia.groupby('Descripcion').agg({
+                'Cantidad': 'sum',
+                'Importe_Total': 'sum'
+            }).reset_index()
+            top_facturacion_dia = top_facturacion_dia.rename(columns={'Importe_Total': 'Importe'})
+            top_facturacion_dia = top_facturacion_dia.sort_values('Importe', ascending=False).head(15)
+
+            col1, col2 = st.columns([2, 1])
+
+            with col1:
+                fig_top_facturacion_dia = px.bar(
+                    top_facturacion_dia,
+                    x='Importe',
+                    y='Descripcion',
+                    orientation='h',
+                    title='Top 15 Productos por Ingresos',
+                    color='Importe',
+                    color_continuous_scale='Oranges'
+                )
+                st.plotly_chart(fig_top_facturacion_dia, use_container_width=True)
+
+            with col2:
+                st.dataframe(
+                    top_facturacion_dia.rename(columns={'Importe': 'Facturacion Total ($)'}),
+                    use_container_width=True,
+                    hide_index=True
+                )
+        else:
+            st.warning("No hay columna Descripcion en los datos")
+
+        st.markdown("-------------")
+
+        # --- Analisis de tickets del dia ---
+        st.subheader("Analisis de Tickets del Dia")
+        st.caption(
+            "Pasadena: se considera 'comida' a los tickets que incluyen productos de las familias "
+            "COCINA, PLATO DEL DIA, COMIDA(S) o ENSALADAS."
+        )
+        st.caption(
+            "Junin: se considera 'comida' a los tickets que incluyen productos de las familias "
+            "ALMUERZO o ENSALADAS (Junin no usa COCINA ni PLATO DEL DIA; agrupa sus platos principales "
+            "bajo la familia ALMUERZO)."
+        )
+        st.markdown("Calcula ticket promedio total, ticket promedio de comida y ticket promedio sin comida.")
+
+        metricas_tickets = _calcular_metricas_tickets(df_dia, df_consumos)
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            _metric_con_confiabilidad("Ticket promedio total", f"${metricas_tickets['ticket_promedio_total']:,.2f}", metricas_tickets['confiabilidad_ticket_total']['confiabilidad_pct'])
+        with col2:
+            _metric_con_confiabilidad("Ticket promedio comida", f"${metricas_tickets['ticket_promedio_comida']:,.2f}", metricas_tickets['confiabilidad_ticket_comida']['confiabilidad_pct'])
+        with col3:
+            _metric_con_confiabilidad("Ticket promedio sin comida", f"${metricas_tickets['ticket_promedio_sin_comida']:,.2f}", metricas_tickets['confiabilidad_ticket_sin_comida']['confiabilidad_pct'])
+
+        st.markdown("-------------")
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Tickets totales", f"{metricas_tickets['total_tickets']:,}")
+        with c2:
+            st.metric("Tickets con comida", f"{metricas_tickets['tickets_comida']:,}")
+        with c3:
+            st.metric("Tickets sin comida", f"{metricas_tickets['tickets_sin_comida']:,}")
+
+        st.markdown("-------------")
+
+        st.header("Analisis por cubiertos")
+        st.markdown("Calcula facturacion por cubierto total, de comida y sin comida.")
+
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            _metric_con_confiabilidad("Facturacion por cubierto total", f"${metricas_tickets['facturacion_por_cubierto_total']:,.2f}", metricas_tickets['confiabilidad_facturacion_cubierto_total']['confiabilidad_pct'])
+        with f2:
+            _metric_con_confiabilidad("Facturacion por cubierto (comida)", f"${metricas_tickets['facturacion_por_cubierto_comida']:,.2f}", metricas_tickets['confiabilidad_facturacion_cubierto_comida']['confiabilidad_pct'])
+        with f3:
+            _metric_con_confiabilidad("Facturacion por cubierto (sin comida)", f"${metricas_tickets['facturacion_por_cubierto_sin_comida']:,.2f}", metricas_tickets['confiabilidad_facturacion_cubierto_sin_comida']['confiabilidad_pct'])
+
+        st.markdown("-------------")
+
+        g1, g2, g3 = st.columns(3)
+        with g1:
+            st.metric("Cubiertos totales", f"{metricas_tickets['cubiertos_total']:,.0f}")
+        with g2:
+            st.metric("Cubiertos (comida)", f"{metricas_tickets['cubiertos_comida']:,.0f}")
+        with g3:
+            st.metric("Cubiertos (sin comida)", f"{metricas_tickets['cubiertos_sin_comida']:,.0f}")
+
+        st.markdown("-------------")
+
+        st.subheader("Cubiertos con y sin comida")
+        cubiertos_comida_val = metricas_tickets['cubiertos_comida']
+        cubiertos_sin_comida_val = metricas_tickets['cubiertos_sin_comida']
+        cubiertos_pie_total = cubiertos_comida_val + cubiertos_sin_comida_val
+        if cubiertos_pie_total > 0:
+            df_cubiertos_pie = pd.DataFrame({
+                'Categoria': ['Con comida', 'Sin comida'],
+                'Cubiertos': [cubiertos_comida_val, cubiertos_sin_comida_val]
+            })
+            df_cubiertos_pie['Porcentaje'] = (df_cubiertos_pie['Cubiertos'] / cubiertos_pie_total * 100).round(2)
+            df_cubiertos_pie['Categoria_Label'] = df_cubiertos_pie.apply(
+                lambda row: f"{row['Categoria']} ({row['Porcentaje']:.1f}%)", axis=1
+            )
+            df_cubiertos_pie['Slice_Label'] = df_cubiertos_pie.apply(
+                lambda row: f"{row['Categoria']}<br>{row['Cubiertos']:,.0f}", axis=1
+            )
+
+            fig_torta_cubiertos = px.pie(
+                df_cubiertos_pie,
+                values='Cubiertos',
+                names='Categoria_Label',
+                title='Distribucion de Cubiertos (con y sin comida)',
+                hole=0.4,
+                custom_data=['Categoria'],
+                color_discrete_sequence=['#58D68D', '#EC7063']
+            )
+            fig_torta_cubiertos.update_traces(
+                textposition='inside',
+                text=df_cubiertos_pie['Slice_Label'],
+                hovertemplate='<b>%{customdata[0]}</b><br>Cubiertos: %{value:,.0f}<extra></extra>'
+            )
+            st.plotly_chart(fig_torta_cubiertos, use_container_width=True)
+        else:
+            st.info("No hay datos de cubiertos para graficar.")
+
+        st.markdown("-------------")
+
+        st.subheader("Cubiertos promedio y mediana por ticket")
+
+        h1, h2, h3 = st.columns(3)
+        with h1:
+            _metric_con_confiabilidad("Cubiertos promedio (total)", f"{metricas_tickets['cubiertos_promedio_total']:,.2f}", metricas_tickets['confiabilidad_cubiertos_total']['confiabilidad_pct'])
+        with h2:
+            _metric_con_confiabilidad("Cubiertos promedio (comida)", f"{metricas_tickets['cubiertos_promedio_comida']:,.2f}", metricas_tickets['confiabilidad_cubiertos_comida']['confiabilidad_pct'])
+        with h3:
+            _metric_con_confiabilidad("Cubiertos promedio (sin comida)", f"{metricas_tickets['cubiertos_promedio_sin_comida']:,.2f}", metricas_tickets['confiabilidad_cubiertos_sin_comida']['confiabilidad_pct'])
+
+        i1, i2, i3 = st.columns(3)
+        with i1:
+            st.metric("Cubiertos mediana (total)", f"{metricas_tickets['cubiertos_mediana_total']:,.2f}")
+        with i2:
+            st.metric("Cubiertos mediana (comida)", f"{metricas_tickets['cubiertos_mediana_comida']:,.2f}")
+        with i3:
+            st.metric("Cubiertos mediana (sin comida)", f"{metricas_tickets['cubiertos_mediana_sin_comida']:,.2f}")
+
+        st.caption(
+            "Confiabilidad de cada promedio: verde = confiable (>=90%), amarillo = medio confiable (70-89.9%), "
+            "rojo = no confiable (<70%). Confiabilidad = 100 x (1 - margen de error al 95% / promedio)."
+        )
+
+        st.caption(
+            "Regla aplicada: un ticket es 'con comida' si contiene al menos un producto de las familias de comida "
+            "de su sucursal (ver detalle por local abajo). Facturacion comida = suma de las lineas de esas familias "
+            "(no el total del ticket). Ticket promedio comida = facturacion comida / cantidad de tickets con comida. "
+            "Ticket promedio sin comida = facturacion de las demas lineas / cantidad de tickets sin comida. "
+            "Cubiertos = suma de la cantidad de la familia CUBIERTOS agrupada por ticket (una o mas lineas por ticket), "
+            "clasificada segun si el ticket es con, sin comida, o el total general. Facturacion por cubierto = "
+            "facturacion de la clase / cubiertos de esa clase. Promedio y mediana de cubiertos se calculan sobre la "
+            "cantidad de cubiertos por ticket dentro de cada categoria."
+        )
+
 # ========== VISTA: FACTURACION ==========
-if menu_opcion == "Facturacion":
+elif menu_opcion == "Facturacion":
     st.header("Facturacion")
     
     # Calcular metricas del periodo
@@ -1891,6 +2234,57 @@ elif menu_opcion == "Analisis de tickets":
         st.metric("Tickets sin comida", f"{metricas_tickets['tickets_sin_comida']:,}")
 
     st.markdown("-------------")
+    st.subheader("Evolucion diaria del ticket promedio")
+    st.caption("Evolucion diaria del ticket promedio total, ticket promedio comida y ticket promedio sin comida, calculados sobre el periodo y filtros actualmente seleccionados en el panel lateral (sucursal, rango de fechas y turno).")
+
+    if 'Fecha' not in df_tickets_filtrado.columns or df_tickets_filtrado.empty:
+        st.warning("No hay datos disponibles para proyectar.")
+    else:
+        df_proy_base = df_tickets_filtrado.copy()
+        df_proy_base['Fecha_dt'] = pd.to_datetime(df_proy_base['Fecha'])
+        fechas_unicas = sorted(df_proy_base['Fecha_dt'].dt.date.unique())
+
+        filas_proyeccion = []
+        for fecha_dia in fechas_unicas:
+            df_ese_dia = df_proy_base[df_proy_base['Fecha_dt'].dt.date == fecha_dia]
+            metricas_dia = _calcular_metricas_tickets(df_ese_dia, df_consumos)
+            filas_proyeccion.append({
+                'Fecha': fecha_dia,
+                'Ticket promedio total': metricas_dia['ticket_promedio_total'],
+                'Ticket promedio comida': metricas_dia['ticket_promedio_comida'],
+                'Ticket promedio sin comida': metricas_dia['ticket_promedio_sin_comida'],
+                'Cantidad de tickets': metricas_dia['total_tickets'],
+                'Tickets comida': metricas_dia['tickets_comida'],
+                'Tickets sin comida': metricas_dia['tickets_sin_comida'],
+            })
+
+        df_proyeccion = pd.DataFrame(filas_proyeccion)
+
+        if df_proyeccion.empty:
+            st.warning("No hay datos suficientes para generar la proyeccion.")
+        else:
+            fig_proyeccion = px.line(
+                df_proyeccion,
+                x='Fecha',
+                y=['Ticket promedio total', 'Ticket promedio comida', 'Ticket promedio sin comida'],
+                title='Evolucion del Ticket Promedio por Dia',
+                labels={'value': 'Ticket Promedio ($)', 'Fecha': 'Fecha', 'variable': 'Metrica'},
+                markers=True,
+                color_discrete_map={
+                    'Ticket promedio total': '#5DADE2',
+                    'Ticket promedio comida': '#58D68D',
+                    'Ticket promedio sin comida': '#F8B739',
+                }
+            )
+            fig_proyeccion.update_traces(hovertemplate='%{y:$,.2f}<extra>%{fullData.name}</extra>')
+            fig_proyeccion.update_layout(hovermode='x unified', legend_title_text='Metrica')
+            st.plotly_chart(fig_proyeccion, use_container_width=True)
+
+            st.markdown("-------------")
+            st.subheader("Detalle diario")
+            st.dataframe(_format_table(df_proyeccion, currency_cols=['Ticket promedio total', 'Ticket promedio comida', 'Ticket promedio sin comida']), use_container_width=True, hide_index=True)
+
+    st.markdown("-------------")
 
     st.header("Analisis por cubiertos")
     st.markdown("Calcula facturacion por cubierto total, de comida y sin comida.")
@@ -1915,6 +2309,43 @@ elif menu_opcion == "Analisis de tickets":
 
     st.markdown("-------------")
 
+    st.subheader("Cubiertos con y sin comida")
+    cubiertos_comida_val = metricas_tickets['cubiertos_comida']
+    cubiertos_sin_comida_val = metricas_tickets['cubiertos_sin_comida']
+    cubiertos_pie_total = cubiertos_comida_val + cubiertos_sin_comida_val
+    if cubiertos_pie_total > 0:
+        df_cubiertos_pie = pd.DataFrame({
+            'Categoria': ['Con comida', 'Sin comida'],
+            'Cubiertos': [cubiertos_comida_val, cubiertos_sin_comida_val]
+        })
+        df_cubiertos_pie['Porcentaje'] = (df_cubiertos_pie['Cubiertos'] / cubiertos_pie_total * 100).round(2)
+        df_cubiertos_pie['Categoria_Label'] = df_cubiertos_pie.apply(
+            lambda row: f"{row['Categoria']} ({row['Porcentaje']:.1f}%)", axis=1
+        )
+        df_cubiertos_pie['Slice_Label'] = df_cubiertos_pie.apply(
+            lambda row: f"{row['Categoria']}<br>{row['Cubiertos']:,.0f}", axis=1
+        )
+
+        fig_torta_cubiertos = px.pie(
+            df_cubiertos_pie,
+            values='Cubiertos',
+            names='Categoria_Label',
+            title='Distribucion de Cubiertos (con y sin comida)',
+            hole=0.4,
+            custom_data=['Categoria'],
+            color_discrete_sequence=['#58D68D', '#EC7063']
+        )
+        fig_torta_cubiertos.update_traces(
+            textposition='inside',
+            text=df_cubiertos_pie['Slice_Label'],
+            hovertemplate='<b>%{customdata[0]}</b><br>Cubiertos: %{value:,.0f}<extra></extra>'
+        )
+        st.plotly_chart(fig_torta_cubiertos, use_container_width=True)
+    else:
+        st.info("No hay datos de cubiertos para graficar.")
+
+    st.markdown("-------------")
+
     st.subheader("Cubiertos promedio y mediana por ticket")
 
     h1, h2, h3 = st.columns(3)
@@ -1933,6 +2364,52 @@ elif menu_opcion == "Analisis de tickets":
     with i3:
         st.metric("Cubiertos mediana (sin comida)", f"{metricas_tickets['cubiertos_mediana_sin_comida']:,.2f}")
 
+    st.markdown("-------------")
+    st.subheader("Evolucion diaria de la facturacion por cubierto")
+    st.caption("Evolucion diaria de la facturacion por cubierto (total, comida y sin comida), calculada sobre el periodo y filtros actualmente seleccionados en el panel lateral (sucursal, rango de fechas y turno).")
+
+    if 'Fecha' not in df_tickets_filtrado.columns or df_tickets_filtrado.empty:
+        st.warning("No hay datos disponibles para proyectar.")
+    else:
+        filas_cubierto = []
+        for fecha_dia in fechas_unicas:
+            df_ese_dia = df_proy_base[df_proy_base['Fecha_dt'].dt.date == fecha_dia]
+            metricas_dia = _calcular_metricas_tickets(df_ese_dia, df_consumos)
+            filas_cubierto.append({
+                'Fecha': fecha_dia,
+                'Facturacion por cubierto total': metricas_dia['facturacion_por_cubierto_total'],
+                'Facturacion por cubierto comida': metricas_dia['facturacion_por_cubierto_comida'],
+                'Facturacion por cubierto sin comida': metricas_dia['facturacion_por_cubierto_sin_comida'],
+                'Cantidad de cubiertos': metricas_dia['cubiertos_total'],
+                'Cubiertos comida': metricas_dia['cubiertos_comida'],
+                'Cubiertos sin comida': metricas_dia['cubiertos_sin_comida'],
+            })
+        df_cubierto_proyeccion = pd.DataFrame(filas_cubierto)
+
+        if df_cubierto_proyeccion.empty:
+            st.warning("No hay datos suficientes para generar la proyeccion por cubierto.")
+        else:
+            fig_cubierto = px.line(
+                df_cubierto_proyeccion,
+                x='Fecha',
+                y=['Facturacion por cubierto total', 'Facturacion por cubierto comida', 'Facturacion por cubierto sin comida'],
+                title='Evolucion de Facturacion por Cubierto por Dia',
+                labels={'value': 'Facturacion por Cubierto ($)', 'Fecha': 'Fecha', 'variable': 'Metrica'},
+                markers=True,
+                color_discrete_map={
+                    'Facturacion por cubierto total': '#5DADE2',
+                    'Facturacion por cubierto comida': '#58D68D',
+                    'Facturacion por cubierto sin comida': '#F8B739',
+                }
+            )
+            fig_cubierto.update_traces(hovertemplate='%{y:$,.2f}<extra>%{fullData.name}</extra>')
+            fig_cubierto.update_layout(hovermode='x unified', legend_title_text='Metrica')
+            st.plotly_chart(fig_cubierto, use_container_width=True)
+
+            st.markdown("-------------")
+            st.subheader("Detalle diario - Facturacion por cubierto")
+            st.dataframe(_format_table(df_cubierto_proyeccion, currency_cols=['Facturacion por cubierto total', 'Facturacion por cubierto comida', 'Facturacion por cubierto sin comida']), use_container_width=True, hide_index=True)
+
     st.caption(
         "Confiabilidad de cada promedio: verde = confiable (>=90%), amarillo = medio confiable (70-89.9%), "
         "rojo = no confiable (<70%). Confiabilidad = 100 x (1 - margen de error al 95% / promedio)."
@@ -1949,7 +2426,265 @@ elif menu_opcion == "Analisis de tickets":
         "cantidad de cubiertos por ticket dentro de cada categoria."
     )
 
-# ========== VISTA: ANLISIS DE REGALOS ==========
+# ========== VISTA: NEGOCIO SIN REGALOS ==========
+elif menu_opcion == "Negocio sin regalos":
+    st.header("Negocio sin regalos")
+    st.markdown("Selecciona un producto para simular como quedaria el negocio si ese producto no existiera. Se excluyen TODOS los tickets que contienen el producto seleccionado (como si esos tickets nunca hubieran existido) y se recalculan las mismas metricas de Analisis de tickets sobre los tickets restantes.")
+
+    if 'Descripcion' not in df_tickets_filtrado.columns or 'Numero' not in df_tickets_filtrado.columns or df_tickets_filtrado.empty:
+        st.warning("No hay datos disponibles para simular.")
+    else:
+        productos_disponibles_negocio = sorted(df_tickets_filtrado['Descripcion'].dropna().unique().tolist())
+        if len(productos_disponibles_negocio) == 0:
+            st.warning("No hay productos disponibles en el periodo seleccionado.")
+        else:
+            producto_a_excluir = st.selectbox(
+                "Selecciona el producto a excluir del negocio",
+                productos_disponibles_negocio,
+                index=0,
+                key="producto_excluir_negocio"
+            )
+
+            tickets_con_producto_excluir = df_tickets_filtrado[
+                df_tickets_filtrado['Descripcion'] == producto_a_excluir
+            ]['Numero'].unique()
+
+            df_tickets_sin_producto = df_tickets_filtrado[
+                ~df_tickets_filtrado['Numero'].isin(tickets_con_producto_excluir)
+            ].copy()
+
+            facturacion_total_original = df_tickets_filtrado['Importe'].sum()
+            facturacion_total_sin_producto = df_tickets_sin_producto['Importe'].sum()
+            facturacion_perdida = facturacion_total_original - facturacion_total_sin_producto
+
+            st.markdown("-------------")
+
+            st.subheader("Impacto de excluir este producto")
+            imp1, imp2, imp3 = st.columns(3)
+            with imp1:
+                st.metric("Facturacion total (sin este producto)", f"${facturacion_total_sin_producto:,.2f}")
+            with imp2:
+                st.metric("Facturacion perdida (tickets excluidos)", f"${facturacion_perdida:,.2f}")
+            with imp3:
+                st.metric("Tickets excluidos", f"{len(tickets_con_producto_excluir):,}")
+            st.caption("Facturacion total sin este producto = suma de Importe de todas las lineas de los tickets que NO contienen el producto seleccionado. Facturacion perdida = facturacion total original menos la facturacion sin el producto (equivale a la suma de Importe de los tickets excluidos).")
+
+            st.markdown("-------------")
+
+            metricas_tickets_negocio = _calcular_metricas_tickets(df_tickets_sin_producto, df_consumos)
+
+            col1n, col2n, col3n = st.columns(3)
+            with col1n:
+                _metric_con_confiabilidad("Ticket promedio total", f"${metricas_tickets_negocio['ticket_promedio_total']:,.2f}", metricas_tickets_negocio['confiabilidad_ticket_total']['confiabilidad_pct'])
+            with col2n:
+                _metric_con_confiabilidad("Ticket promedio comida", f"${metricas_tickets_negocio['ticket_promedio_comida']:,.2f}", metricas_tickets_negocio['confiabilidad_ticket_comida']['confiabilidad_pct'])
+            with col3n:
+                _metric_con_confiabilidad("Ticket promedio sin comida", f"${metricas_tickets_negocio['ticket_promedio_sin_comida']:,.2f}", metricas_tickets_negocio['confiabilidad_ticket_sin_comida']['confiabilidad_pct'])
+
+            st.markdown("-------------")
+
+            c1n, c2n, c3n = st.columns(3)
+            with c1n:
+                st.metric("Tickets totales", f"{metricas_tickets_negocio['total_tickets']:,}")
+            with c2n:
+                st.metric("Tickets con comida", f"{metricas_tickets_negocio['tickets_comida']:,}")
+            with c3n:
+                st.metric("Tickets sin comida", f"{metricas_tickets_negocio['tickets_sin_comida']:,}")
+
+            st.markdown("-------------")
+            st.subheader("Evolucion diaria del ticket promedio")
+            st.caption("Evolucion diaria del ticket promedio total, ticket promedio comida y ticket promedio sin comida, calculados sobre el periodo y filtros actualmente seleccionados en el panel lateral (sucursal, rango de fechas y turno).")
+
+            if 'Fecha' not in df_tickets_sin_producto.columns or df_tickets_sin_producto.empty:
+                st.warning("No hay datos disponibles para proyectar.")
+            else:
+                df_proy_base_negocio = df_tickets_sin_producto.copy()
+                df_proy_base_negocio['Fecha_dt'] = pd.to_datetime(df_proy_base_negocio['Fecha'])
+                fechas_unicas_negocio = sorted(df_proy_base_negocio['Fecha_dt'].dt.date.unique())
+
+                filas_proyeccion_negocio = []
+                for fecha_dia_negocio in fechas_unicas_negocio:
+                    df_ese_dia_negocio = df_proy_base_negocio[df_proy_base_negocio['Fecha_dt'].dt.date == fecha_dia_negocio]
+                    metricas_dia_negocio = _calcular_metricas_tickets(df_ese_dia_negocio, df_consumos)
+                    filas_proyeccion_negocio.append({
+                        'Fecha': fecha_dia_negocio,
+                        'Ticket promedio total': metricas_dia_negocio['ticket_promedio_total'],
+                        'Ticket promedio comida': metricas_dia_negocio['ticket_promedio_comida'],
+                        'Ticket promedio sin comida': metricas_dia_negocio['ticket_promedio_sin_comida'],
+                        'Cantidad de tickets': metricas_dia_negocio['total_tickets'],
+                        'Tickets comida': metricas_dia_negocio['tickets_comida'],
+                        'Tickets sin comida': metricas_dia_negocio['tickets_sin_comida'],
+                    })
+
+                df_proyeccion_negocio = pd.DataFrame(filas_proyeccion_negocio)
+
+                if df_proyeccion_negocio.empty:
+                    st.warning("No hay datos suficientes para generar la proyeccion.")
+                else:
+                    fig_proyeccion_negocio = px.line(
+                        df_proyeccion_negocio,
+                        x='Fecha',
+                        y=['Ticket promedio total', 'Ticket promedio comida', 'Ticket promedio sin comida'],
+                        title='Evolucion del Ticket Promedio por Dia',
+                        labels={'value': 'Ticket Promedio ($)', 'Fecha': 'Fecha', 'variable': 'Metrica'},
+                        markers=True,
+                        color_discrete_map={
+                            'Ticket promedio total': '#5DADE2',
+                            'Ticket promedio comida': '#58D68D',
+                            'Ticket promedio sin comida': '#F8B739',
+                        }
+                    )
+                    fig_proyeccion_negocio.update_traces(hovertemplate='%{y:$,.2f}<extra>%{fullData.name}</extra>')
+                    fig_proyeccion_negocio.update_layout(hovermode='x unified', legend_title_text='Metrica')
+                    st.plotly_chart(fig_proyeccion_negocio, use_container_width=True)
+
+                    st.markdown("-------------")
+                    st.subheader("Detalle diario")
+                    st.dataframe(_format_table(df_proyeccion_negocio, currency_cols=['Ticket promedio total', 'Ticket promedio comida', 'Ticket promedio sin comida']), use_container_width=True, hide_index=True)
+
+            st.markdown("-------------")
+
+            st.header("Analisis por cubiertos")
+            st.markdown("Calcula facturacion por cubierto total, de comida y sin comida.")
+
+            f1n, f2n, f3n = st.columns(3)
+            with f1n:
+                _metric_con_confiabilidad("Facturacion por cubierto total", f"${metricas_tickets_negocio['facturacion_por_cubierto_total']:,.2f}", metricas_tickets_negocio['confiabilidad_facturacion_cubierto_total']['confiabilidad_pct'])
+            with f2n:
+                _metric_con_confiabilidad("Facturacion por cubierto (comida)", f"${metricas_tickets_negocio['facturacion_por_cubierto_comida']:,.2f}", metricas_tickets_negocio['confiabilidad_facturacion_cubierto_comida']['confiabilidad_pct'])
+            with f3n:
+                _metric_con_confiabilidad("Facturacion por cubierto (sin comida)", f"${metricas_tickets_negocio['facturacion_por_cubierto_sin_comida']:,.2f}", metricas_tickets_negocio['confiabilidad_facturacion_cubierto_sin_comida']['confiabilidad_pct'])
+
+            st.markdown("-------------")
+
+            g1n, g2n, g3n = st.columns(3)
+            with g1n:
+                st.metric("Cubiertos totales", f"{metricas_tickets_negocio['cubiertos_total']:,.0f}")
+            with g2n:
+                st.metric("Cubiertos (comida)", f"{metricas_tickets_negocio['cubiertos_comida']:,.0f}")
+            with g3n:
+                st.metric("Cubiertos (sin comida)", f"{metricas_tickets_negocio['cubiertos_sin_comida']:,.0f}")
+
+            st.markdown("-------------")
+
+            st.subheader("Cubiertos con y sin comida")
+            cubiertos_comida_val_negocio = metricas_tickets_negocio['cubiertos_comida']
+            cubiertos_sin_comida_val_negocio = metricas_tickets_negocio['cubiertos_sin_comida']
+            cubiertos_pie_total_negocio = cubiertos_comida_val_negocio + cubiertos_sin_comida_val_negocio
+            if cubiertos_pie_total_negocio > 0:
+                df_cubiertos_pie_negocio = pd.DataFrame({
+                    'Categoria': ['Con comida', 'Sin comida'],
+                    'Cubiertos': [cubiertos_comida_val_negocio, cubiertos_sin_comida_val_negocio]
+                })
+                df_cubiertos_pie_negocio['Porcentaje'] = (df_cubiertos_pie_negocio['Cubiertos'] / cubiertos_pie_total_negocio * 100).round(2)
+                df_cubiertos_pie_negocio['Categoria_Label'] = df_cubiertos_pie_negocio.apply(
+                    lambda row: f"{row['Categoria']} ({row['Porcentaje']:.1f}%)", axis=1
+                )
+                df_cubiertos_pie_negocio['Slice_Label'] = df_cubiertos_pie_negocio.apply(
+                    lambda row: f"{row['Categoria']}<br>{row['Cubiertos']:,.0f}", axis=1
+                )
+
+                fig_torta_cubiertos_negocio = px.pie(
+                    df_cubiertos_pie_negocio,
+                    values='Cubiertos',
+                    names='Categoria_Label',
+                    title='Distribucion de Cubiertos (con y sin comida)',
+                    hole=0.4,
+                    custom_data=['Categoria'],
+                    color_discrete_sequence=['#58D68D', '#EC7063']
+                )
+                fig_torta_cubiertos_negocio.update_traces(
+                    textposition='inside',
+                    text=df_cubiertos_pie_negocio['Slice_Label'],
+                    hovertemplate='<b>%{customdata[0]}</b><br>Cubiertos: %{value:,.0f}<extra></extra>'
+                )
+                st.plotly_chart(fig_torta_cubiertos_negocio, use_container_width=True)
+            else:
+                st.info("No hay datos de cubiertos para graficar.")
+
+            st.markdown("-------------")
+
+            st.subheader("Cubiertos promedio y mediana por ticket")
+
+            h1n, h2n, h3n = st.columns(3)
+            with h1n:
+                _metric_con_confiabilidad("Cubiertos promedio (total)", f"{metricas_tickets_negocio['cubiertos_promedio_total']:,.2f}", metricas_tickets_negocio['confiabilidad_cubiertos_total']['confiabilidad_pct'])
+            with h2n:
+                _metric_con_confiabilidad("Cubiertos promedio (comida)", f"{metricas_tickets_negocio['cubiertos_promedio_comida']:,.2f}", metricas_tickets_negocio['confiabilidad_cubiertos_comida']['confiabilidad_pct'])
+            with h3n:
+                _metric_con_confiabilidad("Cubiertos promedio (sin comida)", f"{metricas_tickets_negocio['cubiertos_promedio_sin_comida']:,.2f}", metricas_tickets_negocio['confiabilidad_cubiertos_sin_comida']['confiabilidad_pct'])
+
+            i1n, i2n, i3n = st.columns(3)
+            with i1n:
+                st.metric("Cubiertos mediana (total)", f"{metricas_tickets_negocio['cubiertos_mediana_total']:,.2f}")
+            with i2n:
+                st.metric("Cubiertos mediana (comida)", f"{metricas_tickets_negocio['cubiertos_mediana_comida']:,.2f}")
+            with i3n:
+                st.metric("Cubiertos mediana (sin comida)", f"{metricas_tickets_negocio['cubiertos_mediana_sin_comida']:,.2f}")
+
+            st.markdown("-------------")
+            st.subheader("Evolucion diaria de la facturacion por cubierto")
+            st.caption("Evolucion diaria de la facturacion por cubierto (total, comida y sin comida), calculada sobre el periodo y filtros actualmente seleccionados en el panel lateral (sucursal, rango de fechas y turno).")
+
+            if 'Fecha' not in df_tickets_sin_producto.columns or df_tickets_sin_producto.empty:
+                st.warning("No hay datos disponibles para proyectar.")
+            else:
+                filas_cubierto_negocio = []
+                for fecha_dia_negocio in fechas_unicas_negocio:
+                    df_ese_dia_negocio = df_proy_base_negocio[df_proy_base_negocio['Fecha_dt'].dt.date == fecha_dia_negocio]
+                    metricas_dia_negocio = _calcular_metricas_tickets(df_ese_dia_negocio, df_consumos)
+                    filas_cubierto_negocio.append({
+                        'Fecha': fecha_dia_negocio,
+                        'Facturacion por cubierto total': metricas_dia_negocio['facturacion_por_cubierto_total'],
+                        'Facturacion por cubierto comida': metricas_dia_negocio['facturacion_por_cubierto_comida'],
+                        'Facturacion por cubierto sin comida': metricas_dia_negocio['facturacion_por_cubierto_sin_comida'],
+                        'Cantidad de cubiertos': metricas_dia_negocio['cubiertos_total'],
+                        'Cubiertos comida': metricas_dia_negocio['cubiertos_comida'],
+                        'Cubiertos sin comida': metricas_dia_negocio['cubiertos_sin_comida'],
+                    })
+                df_cubierto_proyeccion_negocio = pd.DataFrame(filas_cubierto_negocio)
+
+                if df_cubierto_proyeccion_negocio.empty:
+                    st.warning("No hay datos suficientes para generar la proyeccion por cubierto.")
+                else:
+                    fig_cubierto_negocio = px.line(
+                        df_cubierto_proyeccion_negocio,
+                        x='Fecha',
+                        y=['Facturacion por cubierto total', 'Facturacion por cubierto comida', 'Facturacion por cubierto sin comida'],
+                        title='Evolucion de Facturacion por Cubierto por Dia',
+                        labels={'value': 'Facturacion por Cubierto ($)', 'Fecha': 'Fecha', 'variable': 'Metrica'},
+                        markers=True,
+                        color_discrete_map={
+                            'Facturacion por cubierto total': '#5DADE2',
+                            'Facturacion por cubierto comida': '#58D68D',
+                            'Facturacion por cubierto sin comida': '#F8B739',
+                        }
+                    )
+                    fig_cubierto_negocio.update_traces(hovertemplate='%{y:$,.2f}<extra>%{fullData.name}</extra>')
+                    fig_cubierto_negocio.update_layout(hovermode='x unified', legend_title_text='Metrica')
+                    st.plotly_chart(fig_cubierto_negocio, use_container_width=True)
+
+                    st.markdown("-------------")
+                    st.subheader("Detalle diario - Facturacion por cubierto")
+                    st.dataframe(_format_table(df_cubierto_proyeccion_negocio, currency_cols=['Facturacion por cubierto total', 'Facturacion por cubierto comida', 'Facturacion por cubierto sin comida']), use_container_width=True, hide_index=True)
+
+            st.caption(
+                "Confiabilidad de cada promedio: verde = confiable (>=90%), amarillo = medio confiable (70-89.9%), "
+                "rojo = no confiable (<70%). Confiabilidad = 100 x (1 - margen de error al 95% / promedio)."
+            )
+
+            st.caption(
+                "Regla aplicada: un ticket es 'con comida' si contiene al menos un producto de las familias de comida "
+                "de su sucursal (ver detalle por local abajo). Facturacion comida = suma de las lineas de esas familias "
+                "(no el total del ticket). Ticket promedio comida = facturacion comida / cantidad de tickets con comida. "
+                "Ticket promedio sin comida = facturacion de las demas lineas / cantidad de tickets sin comida. "
+                "Cubiertos = suma de la cantidad de la familia CUBIERTOS agrupada por ticket (una o mas lineas por ticket), "
+                "clasificada segun si el ticket es con, sin comida, o el total general. Facturacion por cubierto = "
+                "facturacion de la clase / cubiertos de esa clase. Promedio y mediana de cubiertos se calculan sobre la "
+                "cantidad de cubiertos por ticket dentro de cada categoria."
+            )
+
+# ========== VISTA: ANLISIS DE REGALOS ==========
 elif menu_opcion == "Analisis de regalos":
     st.header("Analisis de regalos")
     
