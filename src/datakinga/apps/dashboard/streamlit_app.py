@@ -610,6 +610,20 @@ if last_run_time:
     status_icon = "OK" if last_run_status == "SUCCESS" else "X"
     st.sidebar.caption(f"Ultima actualizacion: {last_run_time} {status_icon}")
 
+st.sidebar.markdown(
+    """
+    <style>
+    .st-key-btn_force_update button {
+        color: black !important;
+    }
+    .st-key-btn_force_update button p {
+        color: black !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 if st.sidebar.button("Actualizar datos ahora", key="btn_force_update", help="Ejecuta una extraccion manual y actualiza la base de datos"):
     with st.spinner("Actualizando datos... esto puede tardar unos minutos"):
         resultado_update = run_extraction()
@@ -619,6 +633,8 @@ if st.sidebar.button("Actualizar datos ahora", key="btn_force_update", help="Eje
         if resultado_update["errors"]:
             for error_msg in resultado_update["errors"]:
                 st.sidebar.warning(error_msg)
+        st.session_state.pop("fecha_desde_2", None)
+        st.session_state.pop("fecha_hasta_2", None)
         cargar_datos.clear()
         st.rerun()
     else:
