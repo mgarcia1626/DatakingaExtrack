@@ -2453,8 +2453,19 @@ elif menu_opcion == "Negocio sin regalos":
                 ~df_tickets_filtrado['Numero'].isin(tickets_con_producto_excluir)
             ].copy()
 
-            facturacion_total_original = df_tickets_filtrado['Importe'].sum()
-            facturacion_total_sin_producto = df_tickets_sin_producto['Importe'].sum()
+            df_tickets_filtrado_calc = df_tickets_filtrado.copy()
+            if 'Cantidad' not in df_tickets_filtrado_calc.columns:
+                df_tickets_filtrado_calc['Cantidad'] = 1
+            df_tickets_filtrado_calc['Cantidad'] = pd.to_numeric(df_tickets_filtrado_calc['Cantidad'], errors='coerce').fillna(0)
+            df_tickets_filtrado_calc['Importe'] = pd.to_numeric(df_tickets_filtrado_calc['Importe'], errors='coerce').fillna(0)
+            df_tickets_filtrado_calc['Importe_Total_Linea'] = df_tickets_filtrado_calc['Cantidad'] * df_tickets_filtrado_calc['Importe']
+
+            df_tickets_sin_producto_calc = df_tickets_filtrado_calc[
+                ~df_tickets_filtrado_calc['Numero'].isin(tickets_con_producto_excluir)
+            ]
+
+            facturacion_total_original = df_tickets_filtrado_calc['Importe_Total_Linea'].sum()
+            facturacion_total_sin_producto = df_tickets_sin_producto_calc['Importe_Total_Linea'].sum()
             facturacion_perdida = facturacion_total_original - facturacion_total_sin_producto
 
             st.markdown("-------------")
