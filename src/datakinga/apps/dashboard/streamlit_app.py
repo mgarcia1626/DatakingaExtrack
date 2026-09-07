@@ -466,6 +466,60 @@ def _calcular_metricas_tickets(df_tickets_filtrado, df_consumos):
         "confiabilidad_facturacion_cubierto_sin_comida": confiabilidad_facturacion_cubierto_sin_comida,
     }
 
+
+def _calcular_distribucion_cubiertos_por_ticket(df_tickets_filtrado, df_consumos):
+    """Cuenta cuantos tickets (mesas) tienen 1, 2, 3... cubiertos.
+
+    Retorna un DataFrame con columnas 'Cubiertos' (int), 'Cantidad de tickets' y
+    'Cubiertos_Label' (texto para el eje del grafico), ordenado de menor a mayor
+    cantidad de cubiertos. Los valores de cubiertos por encima de 10 se agrupan en
+    una categoria "10+" para mantener el grafico legible. Los tickets sin cubiertos
+    registrados (0, es decir sin lineas de la familia CUBIERTOS) se excluyen, ya que
+    no representan una mesa con cubiertos conocidos.
+    """
+    columnas_necesarias = {"Numero", "Importe"}
+    if df_tickets_filtrado.empty or not columnas_necesarias.issubset(df_tickets_filtrado.columns):
+        return pd.DataFrame(columns=['Cubiertos', 'Cantidad de tickets', 'Cubiertos_Label'])
+
+    df_base = df_tickets_filtrado.copy()
+    if "Cantidad" not in df_base.columns:
+        df_base["Cantidad"] = 1
+
+    df_base["Numero"] = df_base["Numero"].astype(str).str.strip()
+    df_base = df_base[df_base["Numero"].ne("")].copy()
+    if df_base.empty:
+        return pd.DataFrame(columns=['Cubiertos', 'Cantidad de tickets', 'Cubiertos_Label'])
+
+    df_base["Cantidad"] = pd.to_numeric(df_base["Cantidad"], errors="coerce").fillna(0)
+
+    df_con_familia = _agregar_familia(df_base, df_consumos)
+    familia_col = "Familia" if "Familia" in df_con_familia.columns else None
+    if familia_col is None:
+        return pd.DataFrame(columns=['Cubiertos', 'Cantidad de tickets', 'Cubiertos_Label'])
+
+    familias_cubiertos = {"cubiertos", "cibiertos"}
+    mask_cubiertos = df_con_familia[familia_col].map(_normalizar_familia).isin(familias_cubiertos)
+
+    cubiertos_por_ticket = df_con_familia.loc[mask_cubiertos].groupby("Numero", dropna=False)["Cantidad"].sum()
+    cubiertos_por_ticket = cubiertos_por_ticket[cubiertos_por_ticket > 0]
+
+    if cubiertos_por_ticket.empty:
+        return pd.DataFrame(columns=['Cubiertos', 'Cantidad de tickets', 'Cubiertos_Label'])
+
+    cubiertos_enteros = cubiertos_por_ticket.round().astype(int)
+
+    tope_cubiertos = 10
+    cubiertos_bucket = cubiertos_enteros.clip(upper=tope_cubiertos)
+
+    distribucion = cubiertos_bucket.value_counts().reset_index()
+    distribucion.columns = ['Cubiertos', 'Cantidad de tickets']
+    distribucion['Cubiertos_Label'] = distribucion['Cubiertos'].apply(
+        lambda v: f"{tope_cubiertos}+" if v == tope_cubiertos else str(v)
+    )
+    distribucion = distribucion.sort_values('Cubiertos').reset_index(drop=True)
+    return distribucion
+
+
 # Configuracion de la pagina
 st.set_page_config(
     page_title="DataKinga Dashboard",
@@ -1020,6 +1074,35 @@ if menu_opcion == "Resumen del dia":
             st.metric("Cubiertos mediana (comida)", f"{metricas_tickets['cubiertos_mediana_comida']:,.2f}")
         with i3:
             st.metric("Cubiertos mediana (sin comida)", f"{metricas_tickets['cubiertos_mediana_sin_comida']:,.2f}")
+
+        st.markdown("-------------")
+        st.subheader("Numero de cubiertos por ticket (mesa)")
+        st.caption("Cantidad de tickets (mesas) segun la cantidad de cubiertos que tienen. Solo se incluyen tickets con cubiertos registrados (mayor a 0). Los valores de 10 cubiertos o mas se agrupan en la categoria '10+'.")
+
+        df_distribucion_cubiertos = _calcular_distribucion_cubiertos_por_ticket(df_dia, df_consumos)
+
+        if df_distribucion_cubiertos.empty:
+            st.info("No hay datos de cubiertos para graficar.")
+        else:
+            fig_distribucion_cubiertos = px.bar(
+                df_distribucion_cubiertos,
+                x='Cubiertos_Label',
+                y='Cantidad de tickets',
+                title='Numero de Cubiertos por Ticket (Mesa)',
+                labels={'Cubiertos_Label': 'Cantidad de cubiertos', 'Cantidad de tickets': 'Cantidad de tickets'},
+                color='Cantidad de tickets',
+                color_continuous_scale='Blues',
+                text='Cantidad de tickets'
+            )
+            fig_distribucion_cubiertos.update_traces(textposition='outside')
+            fig_distribucion_cubiertos.update_layout(xaxis_type='category', showlegend=False)
+            st.plotly_chart(fig_distribucion_cubiertos, use_container_width=True)
+
+            st.dataframe(
+                df_distribucion_cubiertos[['Cubiertos_Label', 'Cantidad de tickets']].rename(columns={'Cubiertos_Label': 'Cubiertos'}),
+                use_container_width=True,
+                hide_index=True
+            )
 
         st.caption(
             "Confiabilidad de cada promedio: verde = confiable (>=90%), amarillo = medio confiable (70-89.9%), "
@@ -2363,6 +2446,35 @@ elif menu_opcion == "Analisis de tickets":
         st.metric("Cubiertos mediana (comida)", f"{metricas_tickets['cubiertos_mediana_comida']:,.2f}")
     with i3:
         st.metric("Cubiertos mediana (sin comida)", f"{metricas_tickets['cubiertos_mediana_sin_comida']:,.2f}")
+
+    st.markdown("-------------")
+    st.subheader("Numero de cubiertos por ticket (mesa)")
+    st.caption("Cantidad de tickets (mesas) segun la cantidad de cubiertos que tienen. Solo se incluyen tickets con cubiertos registrados (mayor a 0). Los valores de 10 cubiertos o mas se agrupan en la categoria '10+'.")
+
+    df_distribucion_cubiertos = _calcular_distribucion_cubiertos_por_ticket(df_tickets_filtrado, df_consumos)
+
+    if df_distribucion_cubiertos.empty:
+        st.info("No hay datos de cubiertos para graficar.")
+    else:
+        fig_distribucion_cubiertos = px.bar(
+            df_distribucion_cubiertos,
+            x='Cubiertos_Label',
+            y='Cantidad de tickets',
+            title='Numero de Cubiertos por Ticket (Mesa)',
+            labels={'Cubiertos_Label': 'Cantidad de cubiertos', 'Cantidad de tickets': 'Cantidad de tickets'},
+            color='Cantidad de tickets',
+            color_continuous_scale='Blues',
+            text='Cantidad de tickets'
+        )
+        fig_distribucion_cubiertos.update_traces(textposition='outside')
+        fig_distribucion_cubiertos.update_layout(xaxis_type='category', showlegend=False)
+        st.plotly_chart(fig_distribucion_cubiertos, use_container_width=True)
+
+        st.dataframe(
+            df_distribucion_cubiertos[['Cubiertos_Label', 'Cantidad de tickets']].rename(columns={'Cubiertos_Label': 'Cubiertos'}),
+            use_container_width=True,
+            hide_index=True
+        )
 
     st.markdown("-------------")
     st.subheader("Evolucion diaria de la facturacion por cubierto")
