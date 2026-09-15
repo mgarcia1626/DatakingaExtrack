@@ -23,11 +23,14 @@ SUCURSALES = {
 
 
 def login() -> requests.Session:
-    username = os.getenv("DATAKINGA_Cloud_USER")
-    password = os.getenv("DATAKINGA_Cloud_PASSWORD")
+    username = os.getenv("DATAKINGA_Cloud_USER") or os.getenv("DATAKINGA_USER")
+    password = os.getenv("DATAKINGA_Cloud_PASSWORD") or os.getenv("DATAKINGA_PASSWORD")
 
     if not username or not password:
-        raise ValueError("Define DATAKINGA_USER y DATAKINGA_PASSWORD en .env")
+        raise ValueError(
+            "Define DATAKINGA_USER/DATAKINGA_PASSWORD or "
+            "DATAKINGA_Cloud_USER/DATAKINGA_Cloud_PASSWORD en .env"
+        )
 
     session = requests.Session()
     session.headers.update({"User-Agent": "Mozilla/5.0"})
@@ -217,35 +220,6 @@ def _build_turno_map(session: requests.Session, sucursal_id: int, desde: datetim
         current += timedelta(days=1)
 
     return turno_map
-
-
-def _get_comandas_for_day(session, sucursal_id, sucursal_nombre, day_str, turno=None, turno_label=None):
-    """Fetch comanda rows for a single sucursal + day, optionally filtered by turno."""
-    params = [("sucursalIds", sucursal_id), ("desde", day_str), ("hasta", day_str)]
-    if turno:
-        params.append(("turnos", turno))
-    try:
-        r = session.get(f"{BASE_URL}/Comandas", params=params, timeout=30)
-        r.raise_for_status()
-    except Exception as e:
-        print(f"   ! Error consultando {sucursal_nombre} {day_str} turno={turno}: {e}")
-        return []
-    soup = BeautifulSoup(r.text, "html.parser")
-    table = soup.find("table", {"id": "kt_comandas_table"})
-    if not table:
-        return []
-    result = []
-    for tr in table.select("tbody tr[data-comanda-id]"):
-        cells = tr.find_all("td")
-        if len(cells) < 3:
-            continue
-        result.append({
-            "internalId": tr["data-comanda-id"],
-            "Tipo": tr.get("data-estado", "").strip().upper(),
-            "Sucursal": sucursal_nombre,
-            "Turno": turno_label,
-        })
-    return result
 
 
 def _get_comandas_for_day(session, sucursal_id, sucursal_nombre, day_str, turno=None, turno_label=None):

@@ -1,7 +1,8 @@
 ```chatagent
 ---
 description: 'This agent is the last agent, will review the code and optimize it to reduce time execution and memory usage.'
-tools: ['execute', 'agent', 'edit', 'read', 'search', 'caveman']
+tools: ['execute', 'agent', 'edit', 'read', 'search', '
+']
 ---
 
 # Code Optimization Agent

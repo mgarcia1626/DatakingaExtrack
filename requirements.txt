@@ -7,6 +7,9 @@ xlrd
 requests
 beautifulsoup4
 
+# Local legacy extraction (Edge/WebDriver)
+selenium
+
 # Environment & config
 python-dotenv
 
